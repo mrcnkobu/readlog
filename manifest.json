@@ -1,0 +1,10 @@
+{
+	"id": "readlog",
+	"name": "Readlog",
+	"version": "0.1.0",
+	"minAppVersion": "1.5.0",
+	"description": "Track books in plain markdown with vault-native logs and daily note integration.",
+	"author": "mkobu",
+	"authorUrl": "",
+	"isDesktopOnly": false
+}

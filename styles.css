@@ -1,0 +1,8 @@
+.readlog-modal-textarea {
+	margin: 0 0 1rem;
+}
+
+.readlog-modal-textarea textarea {
+	width: 100%;
+	min-height: 6rem;
+}

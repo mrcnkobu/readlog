@@ -1,0 +1,36 @@
+{
+	"name": "readlog",
+	"version": "0.1.0",
+	"description": "A plain-markdown reading tracker for Obsidian",
+	"main": "main.js",
+	"scripts": {
+		"dev": "node esbuild.config.mjs",
+		"build": "node esbuild.config.mjs production",
+		"lint": "eslint .",
+		"test": "node --import tsx --test tests/**/*.test.ts",
+		"verify": "npm run lint && npm run test && npm run build",
+		"deploy:test": "bash scripts/deploy-test.sh",
+		"deploy:prod": "bash scripts/deploy-prod.sh"
+	},
+	"keywords": [
+		"obsidian",
+		"plugin",
+		"reading",
+		"books",
+		"notes"
+	],
+	"license": "MIT",
+	"devDependencies": {
+		"@eslint/js": "^9.22.0",
+		"@types/node": "^20.11.0",
+		"@typescript-eslint/eslint-plugin": "^8.30.0",
+		"@typescript-eslint/parser": "^8.30.0",
+		"builtin-modules": "^3.3.0",
+		"esbuild": "^0.20.0",
+		"eslint": "^9.22.0",
+		"globals": "^16.0.0",
+		"obsidian": "latest",
+		"tsx": "^4.19.3",
+		"typescript": "^5.3.0"
+	}
+}
