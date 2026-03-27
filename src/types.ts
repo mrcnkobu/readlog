@@ -3,6 +3,7 @@ import type { TFile } from "obsidian";
 export type BookStatus = "to-read" | "reading" | "done" | "abandoned";
 export type AddEntryType = "note" | "citation";
 export type BookMedium = "print" | "ebook";
+export type KindleClippingKind = "highlight" | "note" | "bookmark";
 
 export interface ReadlogSettings {
 	rootFolder: string;
@@ -80,4 +81,52 @@ export interface AddEntryValues {
 	type: AddEntryType;
 	text: string;
 	locator: string | null;
+}
+
+export interface KindleClipping {
+	sourceTitle: string;
+	sourceAuthor: string | null;
+	kind: KindleClippingKind;
+	page: number | null;
+	locationStart: number | null;
+	locationEnd: number | null;
+	addedAt: string | null;
+	text: string;
+	fingerprint: string;
+	order: number;
+}
+
+export interface KindleClippingGroup {
+	sourceTitle: string;
+	sourceAuthor: string | null;
+	clippings: KindleClipping[];
+}
+
+export interface KindleImportPlanItem {
+	sourceTitle: string;
+	sourceAuthor: string | null;
+	entries: KindleClipping[];
+	matchedBook: BookRecord | null;
+	isAmbiguousMatch: boolean;
+}
+
+export interface KindleImportPlan {
+	books: KindleImportPlanItem[];
+	matchedBooks: number;
+	creatableBooks: number;
+	ambiguousBooks: number;
+	highlightsToImport: number;
+	notesToImport: number;
+	duplicatesSkipped: number;
+	bookmarksSkipped: number;
+	emptyEntriesSkipped: number;
+}
+
+export interface KindleImportResult {
+	importedBooks: number;
+	createdBooks: number;
+	importedHighlights: number;
+	importedNotes: number;
+	skippedBooks: number;
+	importedFingerprints: string[];
 }

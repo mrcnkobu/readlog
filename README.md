@@ -1,28 +1,29 @@
 # Readlog
 
-Readlog is an [Obsidian](https://obsidian.md) plugin for tracking books in plain markdown. It keeps one note per book, appends reading sessions to a vault-native reading log, and optionally writes a plain text line into your daily note.
+Readlog is an [Obsidian](https://obsidian.md) plugin for tracking books in plain markdown. It keeps one note per book, appends reading sessions to a vault-native reading log, optionally writes a plain text line into your daily note, and can import Kindle highlights and notes from a local `My Clippings.txt` file.
 
 ## Scope
 
-### v1
+### Core workflow
 
 - Book-only workflow
 - One note per book under `Reading/Books/`
 - Append-only `Reading/reading-log.md`
 - Optional daily note integration with configurable folder template, filename template, and markdown heading line
-- Four commands:
+- Four core commands:
   - `Add book`
   - `Edit book`
   - `Log reading session`
   - `Add entry`
 
-### v2
+### Kindle import
 
-- Kindle `My Clippings.txt` import
+- Local `My Clippings.txt` import
 - Highlights imported into `## Citations`
 - Kindle notes imported into `## Notes`
 - Conservative matching against existing book notes
-- Deduplicated imports
+- Optional creation of missing book notes
+- Deduplicated imports via persistent clipping fingerprints
 
 The detailed product spec lives in [docs/spec.md](./docs/spec.md).
 
@@ -37,7 +38,8 @@ The detailed product spec lives in [docs/spec.md](./docs/spec.md).
 - Configurable root folder and daily note integration
 - Shortcode-based daily note folder and filename templates
 - Timestamped session logging in daily notes and the reading log
-- Testable pure helpers for section insertion and reading-log appends
+- Local Kindle import that does not touch `reading-log.md` or daily notes
+- Testable pure helpers for section insertion, daily note templates, and My Clippings parsing
 
 ## Installation
 
@@ -86,6 +88,7 @@ npm run verify
 | `Edit book` | Update metadata such as status, medium, device, progress, pages, tags, rating, and dates, or delete the book note |
 | `Log reading session` | Update reading progress, capture optional minutes spent, append to `reading-log.md`, and append a timestamped line to today’s daily note |
 | `Add entry` | Append a note or citation under the correct section in the selected book note |
+| `Import Kindle Clippings` | Pick a local `My Clippings.txt` file, import new highlights and notes, match existing books conservatively, and optionally create missing book notes |
 
 ## Daily note templates
 
@@ -102,6 +105,15 @@ Example:
 - folder template: `{year}-{month}`
 - name template: `{year}-{month}-{day}_{weekday_short}`
 - resolved path for January 6, 2025: `2025-01/2025-01-06_Mon.md`
+
+## Kindle import notes
+
+- Bookmarks are ignored.
+- Duplicate clippings are skipped across repeated imports.
+- Imported clippings update only book notes.
+- Kindle import does not write to `reading-log.md`.
+- Kindle import does not write to daily notes.
+- Kindle import does not change reading progress.
 
 ## License
 

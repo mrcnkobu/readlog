@@ -1,5 +1,6 @@
 import { App, TFile, moment, normalizePath, type FrontMatterCache } from "obsidian";
 import { appendReadingLogEntry, appendToHeadingLine, appendToNamedSection, formatBookNoteContent } from "./markdown";
+import { groupKindleClippingsByBook, normalizeBookMatchTitle } from "./kindle-clippings";
 import type {
 	AddBookValues,
 	AddEntryValues,
@@ -8,6 +9,10 @@ import type {
 	BookRecord,
 	BookStatus,
 	EditBookValues,
+	KindleClipping,
+	KindleImportPlan,
+	KindleImportPlanItem,
+	KindleImportResult,
 	LogReadingSessionResult,
 	LogReadingSessionValues,
 	ReadlogSettings,
@@ -136,7 +141,10 @@ export class ReadlogService {
 			values.note
 		);
 		await this.appendReadingLog(date, logEntry);
-		await this.appendDailyNote(date, this.buildDailyNoteEntry(book.file.basename, book.progress, values.newPage, time, values.minutesSpent));
+		await this.appendDailyNote(
+			date,
+			this.buildDailyNoteEntry(book.file.basename, book.progress, values.newPage, time, values.minutesSpent)
+		);
 
 		return {
 			reachedEnd: values.newPage === totalPages,
@@ -153,6 +161,137 @@ export class ReadlogService {
 		const section = values.type === "citation" ? "Citations" : "Notes";
 		const updated = appendToNamedSection(content, section, entry);
 		await this.app.vault.modify(file, updated);
+	}
+
+	async planKindleImport(clippings: KindleClipping[], importedFingerprints: Iterable<string>): Promise<KindleImportPlan> {
+		const books = await this.listBooks();
+		const knownFingerprints = new Set(importedFingerprints);
+		const pendingFingerprints = new Set<string>();
+		const groups = groupKindleClippingsByBook(clippings);
+
+		const planItems: KindleImportPlanItem[] = [];
+		let matchedBooks = 0;
+		let creatableBooks = 0;
+		let ambiguousBooks = 0;
+		let highlightsToImport = 0;
+		let notesToImport = 0;
+		let duplicatesSkipped = 0;
+		let bookmarksSkipped = 0;
+		let emptyEntriesSkipped = 0;
+
+		for (const group of groups) {
+			const entries: KindleClipping[] = [];
+			for (const clipping of group.clippings) {
+				if (clipping.kind === "bookmark") {
+					bookmarksSkipped += 1;
+					continue;
+				}
+
+				if (!clipping.text) {
+					emptyEntriesSkipped += 1;
+					continue;
+				}
+
+				if (knownFingerprints.has(clipping.fingerprint) || pendingFingerprints.has(clipping.fingerprint)) {
+					duplicatesSkipped += 1;
+					continue;
+				}
+
+				pendingFingerprints.add(clipping.fingerprint);
+				entries.push(clipping);
+				if (clipping.kind === "highlight") {
+					highlightsToImport += 1;
+				} else if (clipping.kind === "note") {
+					notesToImport += 1;
+				}
+			}
+
+			if (entries.length === 0) {
+				continue;
+			}
+
+			const matches = this.findMatchingBooks(group.sourceTitle, books);
+			const isAmbiguousMatch = matches.length > 1;
+			const matchedBook = matches.length === 1 ? matches[0] : null;
+
+			if (isAmbiguousMatch) {
+				ambiguousBooks += 1;
+			} else if (matchedBook) {
+				matchedBooks += 1;
+			} else {
+				creatableBooks += 1;
+			}
+
+			planItems.push({
+				sourceTitle: group.sourceTitle,
+				sourceAuthor: group.sourceAuthor,
+				entries,
+				matchedBook,
+				isAmbiguousMatch,
+			});
+		}
+
+		return {
+			books: planItems,
+			matchedBooks,
+			creatableBooks,
+			ambiguousBooks,
+			highlightsToImport,
+			notesToImport,
+			duplicatesSkipped,
+			bookmarksSkipped,
+			emptyEntriesSkipped,
+		};
+	}
+
+	async applyKindleImport(
+		plan: KindleImportPlan,
+		options: { createMissingBooks: boolean }
+	): Promise<KindleImportResult> {
+		let importedBooks = 0;
+		let createdBooks = 0;
+		let importedHighlights = 0;
+		let importedNotes = 0;
+		let skippedBooks = 0;
+		const importedFingerprints: string[] = [];
+
+		for (const item of plan.books) {
+			if (item.isAmbiguousMatch) {
+				skippedBooks += 1;
+				continue;
+			}
+
+			let targetBook = item.matchedBook;
+			if (!targetBook) {
+				if (!options.createMissingBooks) {
+					skippedBooks += 1;
+					continue;
+				}
+
+				targetBook = await this.createBookFromKindleImport(item.sourceTitle, item.sourceAuthor);
+				createdBooks += 1;
+			}
+
+			await this.appendKindleClippingsToBook(targetBook.file, item.entries);
+			importedBooks += 1;
+			for (const entry of item.entries) {
+				importedFingerprints.push(entry.fingerprint);
+				if (entry.kind === "highlight") {
+					importedHighlights += 1;
+				} else if (entry.kind === "note") {
+					importedNotes += 1;
+				}
+			}
+		}
+
+		return {
+			importedBooks,
+			createdBooks,
+			importedHighlights,
+			importedNotes,
+			skippedBooks,
+			importedFingerprints,
+		};
 	}
 
 	async listBooks(): Promise<BookRecord[]> {
@@ -185,6 +324,48 @@ export class ReadlogService {
 		}
 
 		return await this.loadBookRecord(activeFile);
+	}
+
+	private async createBookFromKindleImport(title: string, author: string | null): Promise<BookRecord> {
+		const file = await this.createBook({
+			title,
+			author: author ?? "",
+			pages: null,
+			tags: [],
+			status: "to-read",
+			medium: "ebook",
+			device: "Kindle",
+		});
+		return await this.requireBook(file);
+	}
+
+	private async appendKindleClippingsToBook(file: TFile, entries: KindleClipping[]): Promise<void> {
+		let content = await this.app.vault.read(file);
+		for (const entry of entries) {
+			const locator = this.formatKindleLocator(entry);
+			if (entry.kind === "highlight") {
+				content = appendToNamedSection(content, "Citations", this.buildCitationEntry(entry.text, locator));
+			} else if (entry.kind === "note") {
+				content = appendToNamedSection(
+					content,
+					"Notes",
+					this.buildImportedKindleNoteEntry(entry.addedAt ?? this.currentDate(), entry.text, locator)
+				);
+			}
+		}
+
+		await this.app.vault.modify(file, content);
+	}
+
+	private findMatchingBooks(title: string, books: BookRecord[]): BookRecord[] {
+		const trimmed = title.trim();
+		const exactMatches = books.filter((book) => book.title.trim().toLowerCase() === trimmed.toLowerCase());
+		if (exactMatches.length > 0) {
+			return exactMatches;
+		}
+
+		const normalized = normalizeBookMatchTitle(trimmed);
+		return books.filter((book) => normalizeBookMatchTitle(book.title) === normalized);
 	}
 
 	private async appendReadingLog(date: string, entry: string): Promise<void> {
@@ -250,9 +431,30 @@ export class ReadlogService {
 		return `**${date}** - ${text}${suffix}`;
 	}
 
+	private buildImportedKindleNoteEntry(date: string, text: string, locator: string | null): string {
+		const suffix = locator ? ` (${locator})` : "";
+		return `**${date}** - Imported from Kindle: ${text}${suffix}`;
+	}
+
 	private buildCitationEntry(text: string, locator: string | null): string {
 		const suffix = locator ? ` - ${locator}` : "";
 		return `> "${text}"${suffix}`;
+	}
+
+	private formatKindleLocator(entry: KindleClipping): string | null {
+		const parts: string[] = [];
+		if (entry.page !== null) {
+			parts.push(`p. ${entry.page}`);
+		}
+		if (entry.locationStart !== null) {
+			const locationEnd = entry.locationEnd ?? entry.locationStart;
+			parts.push(
+				entry.locationStart === locationEnd
+					? `loc. ${entry.locationStart}`
+					: `loc. ${entry.locationStart}-${locationEnd}`
+			);
+		}
+		return parts.length > 0 ? parts.join("; ") : null;
 	}
 
 	private currentDate(): string {

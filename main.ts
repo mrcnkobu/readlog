@@ -1,23 +1,40 @@
 import { Notice, Plugin } from "obsidian";
+import { parseKindleClippings } from "./src/kindle-clippings";
 import { AddBookModal, AddEntryModal, BookSuggestModal, EditBookModal, LogReadingSessionModal } from "./src/modals";
+import { ReadlogService } from "./src/readlog-service";
 import { ReadlogSettingTab } from "./src/settings";
-import { DEFAULT_SETTINGS, type BookRecord, type ReadlogSettings } from "./src/types";
+import {
+	DEFAULT_SETTINGS,
+	type BookRecord,
+	type KindleImportPlan,
+	type KindleImportResult,
+	type ReadlogSettings,
+} from "./src/types";
 import {
 	migrateLegacyDailyNoteNameTemplate,
 	normalizeDailyFolderTemplate,
 	normalizeDailyNameTemplate,
 	normalizeMarkdownHeading,
 } from "./src/utils";
-import { ReadlogService } from "./src/readlog-service";
 
-type PersistedReadlogSettings = Partial<ReadlogSettings> & {
+type PersistedReadlogData = Partial<ReadlogSettings> & {
 	dailyNotesFolder?: string;
 	dailyNoteFormat?: string;
+	importedClippingFingerprints?: string[];
+};
+
+type PickerWindow = Window & {
+	showOpenFilePicker?: (options?: {
+		multiple?: boolean;
+		excludeAcceptAllOption?: boolean;
+		types?: Array<{ description?: string; accept: Record<string, string[]> }>;
+	}) => Promise<Array<{ getFile: () => Promise<File> }>>;
 };
 
 export default class ReadlogPlugin extends Plugin {
 	settings!: ReadlogSettings;
 	private service!: ReadlogService;
+	private importedClippingFingerprints = new Set<string>();
 
 	async onload() {
 		await this.loadSettings();
@@ -87,6 +104,14 @@ export default class ReadlogPlugin extends Plugin {
 				});
 			},
 		});
+
+		this.addCommand({
+			id: "import-kindle-clippings",
+			name: "Import Kindle Clippings",
+			callback: () => {
+				void this.importKindleClippings();
+			},
+		});
 	}
 
 	onunload() {
@@ -94,7 +119,7 @@ export default class ReadlogPlugin extends Plugin {
 	}
 
 	async loadSettings() {
-		const loaded = (await this.loadData() ?? {}) as PersistedReadlogSettings;
+		const loaded = (await this.loadData() ?? {}) as PersistedReadlogData;
 		this.settings = {
 			...DEFAULT_SETTINGS,
 			...loaded,
@@ -108,13 +133,185 @@ export default class ReadlogPlugin extends Plugin {
 			),
 			dailyNoteHeading: normalizeMarkdownHeading(loaded.dailyNoteHeading ?? DEFAULT_SETTINGS.dailyNoteHeading),
 		};
+		this.importedClippingFingerprints = new Set(
+			Array.isArray(loaded.importedClippingFingerprints)
+				? loaded.importedClippingFingerprints.filter((value): value is string => typeof value === "string")
+				: []
+		);
 	}
 
 	async saveSettings() {
 		this.settings.dailyNotesFolderTemplate = normalizeDailyFolderTemplate(this.settings.dailyNotesFolderTemplate);
 		this.settings.dailyNoteNameTemplate = normalizeDailyNameTemplate(this.settings.dailyNoteNameTemplate);
 		this.settings.dailyNoteHeading = normalizeMarkdownHeading(this.settings.dailyNoteHeading);
-		await this.saveData(this.settings);
+		await this.savePluginData();
+	}
+
+	private async savePluginData() {
+		await this.saveData({
+			...this.settings,
+			importedClippingFingerprints: [...this.importedClippingFingerprints],
+		});
+	}
+
+	private async importKindleClippings() {
+		try {
+			const selectedFile = await this.pickTextFile();
+			if (!selectedFile) {
+				return;
+			}
+
+			const clippings = parseKindleClippings(selectedFile.text);
+			if (clippings.length === 0) {
+				new Notice(`No Kindle clippings found in ${selectedFile.name}`);
+				return;
+			}
+
+			const plan = await this.service.planKindleImport(clippings, this.importedClippingFingerprints);
+			if (plan.highlightsToImport === 0 && plan.notesToImport === 0) {
+				new Notice(this.describeNoOpImport(selectedFile.name, plan), 12000);
+				return;
+			}
+
+			const createMissingBooks = plan.creatableBooks > 0
+				? window.confirm(
+					[
+						`Import Kindle clippings from ${selectedFile.name}?`,
+						`${plan.highlightsToImport} highlights and ${plan.notesToImport} notes are ready to import.`,
+						`Press OK to create ${plan.creatableBooks} new book note(s) for unmatched titles.`,
+						"Press Cancel to import only into existing matched books.",
+					].join("\n\n")
+				)
+				: true;
+
+			const result = await this.service.applyKindleImport(plan, { createMissingBooks });
+			for (const fingerprint of result.importedFingerprints) {
+				this.importedClippingFingerprints.add(fingerprint);
+			}
+			await this.savePluginData();
+
+			new Notice(this.describeImportResult(selectedFile.name, plan, result), 12000);
+		} catch (error) {
+			new Notice(error instanceof Error ? error.message : "Kindle import failed");
+		}
+	}
+
+	private describeNoOpImport(fileName: string, plan: KindleImportPlan): string {
+		const parts = [`No new Kindle entries were imported from ${fileName}.`];
+		if (plan.duplicatesSkipped > 0) {
+			parts.push(`${plan.duplicatesSkipped} duplicate clipping(s) skipped.`);
+		}
+		if (plan.bookmarksSkipped > 0) {
+			parts.push(`${plan.bookmarksSkipped} bookmark clipping(s) skipped.`);
+		}
+		if (plan.emptyEntriesSkipped > 0) {
+			parts.push(`${plan.emptyEntriesSkipped} empty clipping(s) skipped.`);
+		}
+		return parts.join(" ");
+	}
+
+	private describeImportResult(fileName: string, plan: KindleImportPlan, result: KindleImportResult): string {
+		const parts = [
+			`Imported ${result.importedHighlights} highlights and ${result.importedNotes} notes from ${fileName}.`,
+			`${result.importedBooks} book note(s) updated.`,
+		];
+		if (result.createdBooks > 0) {
+			parts.push(`${result.createdBooks} new book note(s) created.`);
+		}
+		if (result.skippedBooks > 0) {
+			parts.push(`${result.skippedBooks} book group(s) skipped.`);
+		}
+		if (plan.duplicatesSkipped > 0) {
+			parts.push(`${plan.duplicatesSkipped} duplicate clipping(s) skipped.`);
+		}
+		if (plan.bookmarksSkipped > 0) {
+			parts.push(`${plan.bookmarksSkipped} bookmark clipping(s) skipped.`);
+		}
+		if (plan.emptyEntriesSkipped > 0) {
+			parts.push(`${plan.emptyEntriesSkipped} empty clipping(s) skipped.`);
+		}
+		if (plan.ambiguousBooks > 0) {
+			parts.push(`${plan.ambiguousBooks} ambiguous title match(es) need manual review.`);
+		}
+		return parts.join(" ");
+	}
+
+	private async pickTextFile(): Promise<{ name: string; text: string } | null> {
+		const pickerWindow = window as PickerWindow;
+		if (typeof pickerWindow.showOpenFilePicker === "function") {
+			try {
+				const [handle] = await pickerWindow.showOpenFilePicker({
+					multiple: false,
+					excludeAcceptAllOption: true,
+					types: [
+						{
+							description: "Text files",
+							accept: { "text/plain": [".txt"] },
+						},
+					],
+				});
+				const file = await handle.getFile();
+				return {
+					name: file.name,
+					text: await file.text(),
+				};
+			} catch (error) {
+				if (isAbortError(error)) {
+					return null;
+				}
+				throw error;
+			}
+		}
+
+		return await new Promise((resolve, reject) => {
+			const input = document.createElement("input");
+			input.type = "file";
+			input.accept = ".txt,text/plain";
+			input.style.display = "none";
+
+			let settled = false;
+			const finish = (value: { name: string; text: string } | null) => {
+				if (settled) {
+					return;
+				}
+				settled = true;
+				window.removeEventListener("focus", handleFocus);
+				input.remove();
+				resolve(value);
+			};
+
+			const handleFocus = () => {
+				window.setTimeout(() => {
+					if (!settled && !input.files?.length) {
+						finish(null);
+					}
+				}, 300);
+			};
+
+			input.addEventListener("cancel", () => finish(null), { once: true });
+			input.addEventListener("change", () => {
+				const file = input.files?.item(0);
+				if (!file) {
+					finish(null);
+					return;
+				}
+
+				void file.text().then((text) => {
+					finish({ name: file.name, text });
+				}).catch((error) => {
+					if (!settled) {
+						settled = true;
+						window.removeEventListener("focus", handleFocus);
+						input.remove();
+						reject(error);
+					}
+				});
+			}, { once: true });
+
+			window.addEventListener("focus", handleFocus, { once: true });
+			document.body.appendChild(input);
+			input.click();
+		});
 	}
 
 	private async runForBook(
@@ -156,4 +353,8 @@ export default class ReadlogPlugin extends Plugin {
 			new Notice(error instanceof Error ? error.message : "Readlog command failed");
 		}
 	}
+}
+
+function isAbortError(error: unknown): boolean {
+	return error instanceof DOMException && error.name === "AbortError";
 }

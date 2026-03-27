@@ -8,13 +8,13 @@ Last updated: 2026-03-26
 - One note per item
 - Frontmatter is the source of truth
 - Journal-like logging into plain markdown files
-- No external dependencies in v1
+- No external dependencies in core book tracking
 
 ## v1
 
 ### Scope
 
-Readlog v1 is book-focused. Articles, sidebar UI, metadata fetch, and external imports are intentionally deferred.
+Readlog v1 is book-focused. Articles and sidebar UI are intentionally deferred.
 
 ### Folder structure
 
@@ -219,38 +219,64 @@ Example:
 
 Legacy filename formats like `YYYY-MM-DD` are migrated to shortcode form automatically.
 
-## v2
+## Kindle import
 
-### Kindle `My Clippings.txt` import
+### Command
 
-Readlog v2 may add a local import command:
+Readlog includes a local import command:
 
 - `Readlog: Import Kindle Clippings`
 
-This feature is intentionally scoped to the local `My Clippings.txt` file. No Amazon account login, cloud sync, or Kindle web scraping is planned.
+This feature is intentionally scoped to the local `My Clippings.txt` file. No Amazon account login, cloud sync, or Kindle web scraping is part of the plugin.
 
-### Proposed import flow
+### Import flow
 
 1. Select a local `My Clippings.txt` file
 2. Parse clipping entries into a structured intermediate model
 3. Group entries by source book
-4. Match each group to an existing Readlog book note, or offer to create one
-5. Preview the import plan
-6. Import only new entries
+4. Match each group to an existing Readlog book note
+5. If a title is unmatched, optionally create a new book note for it
+6. Import only new highlights and notes
+
+### Matching rules
+
+- first try case-insensitive exact title matching
+- then try normalized title matching
+- if multiple books match the same imported title, skip that title as ambiguous
+- if no book matches, the user can import only into existing matches or let Readlog create missing book notes
+
+New books created from Kindle import use conservative defaults:
+
+- `status: to-read`
+- `medium: ebook`
+- `device: Kindle`
+- no page count or progress inferred
 
 ### Mapping rules
 
 - Kindle `Highlight` -> `## Citations`
 - Kindle `Note` -> `## Notes`
-- Kindle `Bookmark` -> ignored in the first import iteration
+- Kindle `Bookmark` -> ignored
+
+Imported notes are appended as plain markdown, for example:
+
+```md
+**2025-01-02** - Imported from Kindle: Revisit the chapter on orthogonality. (loc. 400)
+```
+
+Imported highlights are appended as plain markdown, for example:
+
+```md
+> "Care about your craft." - p. 12; loc. 345-346
+```
 
 ### Deduplication
 
-Each imported clipping should be fingerprinted from normalized title, clipping type, locator, and body text. Repeat imports should skip previously imported entries.
+Each imported clipping is fingerprinted from normalized title, author, clipping kind, locator, and text. Repeat imports skip fingerprints that have already been imported before.
 
 ### Non-goals for Kindle import
 
 - no writes to `reading-log.md`
 - no writes to daily notes
 - no changes to reading progress
-- no automatic status transitions
+- no automatic status transitions for existing books
