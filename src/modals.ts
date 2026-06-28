@@ -40,7 +40,8 @@ export class BookSuggestModal extends FuzzySuggestModal<BookRecord> {
 	}
 
 	getItemText(item: BookRecord): string {
-		return `${item.title} (${item.status})`;
+		const author = item.author ? ` — ${item.author}` : "";
+		return `${item.title}${author} (${item.status})`;
 	}
 
 	onChooseItem(item: BookRecord): void {
@@ -67,9 +68,11 @@ export class AddBookModal extends Modal {
 		contentEl.empty();
 		contentEl.createEl("h2", { text: "Add book" });
 
+		let titleInput: TextComponent | undefined;
 		new Setting(contentEl)
 			.setName("Title")
 			.addText((text) => {
+				titleInput = text;
 				text.setPlaceholder("The Pragmatic Programmer");
 				text.onChange((value) => {
 					this.titleValue = value.trim();
@@ -142,6 +145,14 @@ export class AddBookModal extends Modal {
 			.addExtraButton((button) => {
 				button.setIcon("x").setTooltip("Cancel").onClick(() => this.close());
 			});
+
+		this.scope.register([], "Enter", (evt) => {
+			if (document.activeElement?.tagName === "TEXTAREA") return;
+			evt.preventDefault();
+			void this.submit();
+		});
+
+		titleInput?.inputEl.focus();
 	}
 
 	private async submit() {
@@ -178,6 +189,8 @@ export class EditBookModal extends Modal {
 	private startedValue: string;
 	private finishedValue: string;
 	private ratingValue: string;
+	private deleteConfirmState = false;
+	private buttonRowEl!: HTMLElement;
 
 	constructor(
 		app: App,
@@ -205,9 +218,10 @@ export class EditBookModal extends Modal {
 		contentEl.empty();
 		contentEl.createEl("h2", { text: `Edit ${this.book.title}` });
 
+		let titleInput: TextComponent | undefined;
 		createTextSetting(contentEl, "Title", this.titleValue, (value) => {
 			this.titleValue = value.trim();
-		});
+		}, undefined, (text) => { titleInput = text; });
 
 		createTextSetting(contentEl, "Author", this.authorValue, (value) => {
 			this.authorValue = value.trim();
@@ -237,9 +251,12 @@ export class EditBookModal extends Modal {
 				});
 			});
 
+		const progressDesc = this.book.progress_percent !== null
+			? `Currently at ${this.book.progress_percent}%`
+			: undefined;
 		createNumericSetting(contentEl, "Current progress", this.progressCurrentValue, (value) => {
 			this.progressCurrentValue = value.trim();
-		});
+		}, progressDesc);
 
 		createNumericSetting(contentEl, "Progress total", this.progressTotalValue, (value) => {
 			this.progressTotalValue = value.trim();
@@ -259,12 +276,6 @@ export class EditBookModal extends Modal {
 				});
 			});
 
-		if (this.book.progress_percent !== null) {
-			new Setting(contentEl)
-				.setName("Progress percent")
-				.setDesc(`${this.book.progress_percent}%`);
-		}
-
 		createTextSetting(contentEl, "Started", this.startedValue, (value) => {
 			this.startedValue = value.trim();
 		}, "YYYY-MM-DD");
@@ -275,22 +286,40 @@ export class EditBookModal extends Modal {
 
 		createNumericSetting(contentEl, "Rating", this.ratingValue, (value) => {
 			this.ratingValue = value.trim();
+		}, "1–5");
+
+		this.buttonRowEl = contentEl.createDiv();
+		this.renderButtons();
+
+		this.scope.register([], "Enter", (evt) => {
+			if (document.activeElement?.tagName === "TEXTAREA") return;
+			evt.preventDefault();
+			void this.submit();
 		});
 
-		new Setting(contentEl)
-			.addButton((button) => {
-				button.setButtonText("Save").setCta().onClick(() => {
-					void this.submit();
-				});
-			})
-			.addButton((button) => {
-				button.setButtonText("Delete").setWarning().onClick(() => {
-					void this.deleteBook();
-				});
-			})
-			.addExtraButton((button) => {
-				button.setIcon("x").setTooltip("Cancel").onClick(() => this.close());
-			});
+		titleInput?.inputEl.focus();
+	}
+
+	private renderButtons() {
+		this.buttonRowEl.empty();
+		if (!this.deleteConfirmState) {
+			new Setting(this.buttonRowEl)
+				.addButton((btn) => btn.setButtonText("Save").setCta().onClick(() => void this.submit()))
+				.addButton((btn) => btn.setButtonText("Delete").setWarning().onClick(() => {
+					this.deleteConfirmState = true;
+					this.renderButtons();
+				}))
+				.addExtraButton((btn) => btn.setIcon("x").setTooltip("Cancel").onClick(() => this.close()));
+		} else {
+			new Setting(this.buttonRowEl)
+				.setName("Delete this book?")
+				.setDesc("The note file will be trashed. Log entries will be kept.")
+				.addButton((btn) => btn.setButtonText("Confirm delete").setWarning().onClick(() => void this.deleteBook()))
+				.addButton((btn) => btn.setButtonText("Cancel").onClick(() => {
+					this.deleteConfirmState = false;
+					this.renderButtons();
+				}));
+		}
 	}
 
 	private async submit() {
@@ -318,10 +347,6 @@ export class EditBookModal extends Modal {
 	}
 
 	private async deleteBook() {
-		if (!window.confirm(`Delete "${this.book.title}"? Existing reading-log and daily-note entries will be kept.`)) {
-			return;
-		}
-
 		await submitWithNotice(async () => {
 			await this.onDelete();
 			this.close();
@@ -349,10 +374,12 @@ export class LogReadingSessionModal extends Modal {
 		contentEl.createEl("h2", { text: `Log session for ${this.book.title}` });
 
 		const currentSummary = this.describeCurrentProgress(this.book);
+		let progressInput: TextComponent | undefined;
 		new Setting(contentEl)
 			.setName(`New current ${progressInputLabel(this.book.progress_unit)}`)
 			.setDesc(currentSummary)
 			.addText((text) => {
+				progressInput = text;
 				text.inputEl.type = "number";
 				text.setValue(this.newProgressCurrentValue);
 				text.onChange((value) => {
@@ -389,6 +416,17 @@ export class LogReadingSessionModal extends Modal {
 			.addExtraButton((button) => {
 				button.setIcon("x").setTooltip("Cancel").onClick(() => this.close());
 			});
+
+		this.scope.register([], "Enter", (evt) => {
+			if (document.activeElement?.tagName === "TEXTAREA") return;
+			evt.preventDefault();
+			void this.submit();
+		});
+
+		if (progressInput) {
+			progressInput.inputEl.focus();
+			progressInput.inputEl.select();
+		}
 	}
 
 	private describeCurrentProgress(book: BookRecord): string {
@@ -423,6 +461,15 @@ export class AddEntryModal extends Modal {
 		contentEl.empty();
 		contentEl.createEl("h2", { text: "Add entry" });
 
+		const textContainer = contentEl.createDiv({ cls: "readlog-modal-textarea" });
+		textContainer.createEl("label", { text: "Text" });
+		const textArea = new TextAreaComponent(textContainer);
+		textArea.setPlaceholder("Write your note or citation");
+		textArea.onChange((value) => {
+			this.textValue = value.trim();
+		});
+		textArea.inputEl.rows = 6;
+
 		new Setting(contentEl)
 			.setName("Entry type")
 			.addDropdown((dropdown) => {
@@ -433,15 +480,6 @@ export class AddEntryModal extends Modal {
 					this.typeValue = value;
 				});
 			});
-
-		const textContainer = contentEl.createDiv({ cls: "readlog-modal-textarea" });
-		textContainer.createEl("label", { text: "Text" });
-		const textArea = new TextAreaComponent(textContainer);
-		textArea.setPlaceholder("Write your note or citation");
-		textArea.onChange((value) => {
-			this.textValue = value.trim();
-		});
-		textArea.inputEl.rows = 6;
 
 		createTextSetting(contentEl, "Locator", this.locatorValue, (value) => {
 			this.locatorValue = value.trim();
@@ -456,6 +494,14 @@ export class AddEntryModal extends Modal {
 			.addExtraButton((button) => {
 				button.setIcon("x").setTooltip("Cancel").onClick(() => this.close());
 			});
+
+		this.scope.register([], "Enter", (evt) => {
+			if (document.activeElement?.tagName === "TEXTAREA") return;
+			evt.preventDefault();
+			void this.submit();
+		});
+
+		textArea.inputEl.focus();
 	}
 
 	private async submit() {
@@ -474,11 +520,74 @@ export class AddEntryModal extends Modal {
 	}
 }
 
+export class ConfirmModal extends Modal {
+	private settled = false;
+
+	constructor(
+		app: App,
+		private readonly title: string,
+		private readonly body: string,
+		private readonly resolve: (confirmed: boolean) => void,
+		private readonly confirmLabel = "Confirm",
+		private readonly cancelLabel = "Cancel"
+	) {
+		super(app);
+	}
+
+	static prompt(
+		app: App,
+		title: string,
+		body: string,
+		options?: { confirmLabel?: string; cancelLabel?: string }
+	): Promise<boolean> {
+		return new Promise((resolve) => {
+			new ConfirmModal(app, title, body, resolve, options?.confirmLabel, options?.cancelLabel).open();
+		});
+	}
+
+	onOpen() {
+		const { contentEl } = this;
+		contentEl.createEl("h2", { text: this.title });
+		for (const paragraph of this.body.split("\n\n")) {
+			contentEl.createEl("p", { text: paragraph });
+		}
+
+		new Setting(contentEl)
+			.addButton((btn) => {
+				btn.setButtonText(this.confirmLabel).setCta().onClick(() => {
+					this.settled = true;
+					this.resolve(true);
+					this.close();
+				});
+			})
+			.addButton((btn) => {
+				btn.setButtonText(this.cancelLabel).onClick(() => {
+					this.settled = true;
+					this.resolve(false);
+					this.close();
+				});
+			});
+
+		this.scope.register([], "Enter", () => {
+			this.settled = true;
+			this.resolve(true);
+			this.close();
+		});
+	}
+
+	onClose() {
+		if (!this.settled) {
+			this.resolve(false);
+		}
+		this.contentEl.empty();
+	}
+}
+
 function addBookStatusOptions(dropdown: DropdownComponent) {
-	dropdown.addOption("to-read", "to-read");
-	dropdown.addOption("reading", "reading");
-	dropdown.addOption("done", "done");
-	dropdown.addOption("abandoned", "abandoned");
+	dropdown.addOption("to-read", "Want to read");
+	dropdown.addOption("reading", "Reading");
+	dropdown.addOption("done", "Finished");
+	dropdown.addOption("abandoned", "Abandoned");
 }
 
 function addBookMediumOptions(dropdown: DropdownComponent) {
@@ -498,7 +607,8 @@ function createTextSetting(
 	name: string,
 	value: string,
 	onChange: (value: string) => void,
-	description?: string
+	description?: string,
+	onComponent?: (text: TextComponent) => void
 ) {
 	new Setting(container)
 		.setName(name)
@@ -506,6 +616,7 @@ function createTextSetting(
 		.addText((text) => {
 			text.setValue(value);
 			text.onChange(onChange);
+			onComponent?.(text);
 		});
 }
 

@@ -1,6 +1,6 @@
 import { Notice, Plugin } from "obsidian";
 import { parseKindleClippings } from "./src/kindle-clippings";
-import { AddBookModal, AddEntryModal, BookSuggestModal, EditBookModal, LogReadingSessionModal } from "./src/modals";
+import { AddBookModal, AddEntryModal, BookSuggestModal, ConfirmModal, EditBookModal, LogReadingSessionModal } from "./src/modals";
 import { ReadlogService } from "./src/readlog-service";
 import { ReadlogSettingTab } from "./src/settings";
 import {
@@ -41,6 +41,19 @@ export default class ReadlogPlugin extends Plugin {
 		this.service = new ReadlogService(this.app, () => this.settings);
 
 		this.addSettingTab(new ReadlogSettingTab(this.app, this));
+
+		this.addRibbonIcon("book-open", "Log reading session", () => {
+			void this.runForBook(async (book) => {
+				new LogReadingSessionModal(this.app, book, async (values) => {
+					const result = await this.service.logReadingSession(book.file, values);
+					new Notice(
+						result.reachedEnd
+							? `Logged session for ${book.title}. Book reached 100% progress; consider marking it done.`
+							: `Logged session for ${book.title}`
+					);
+				}).open();
+			}, { preferReading: true });
+		});
 
 		this.addCommand({
 			id: "add-book",
@@ -101,7 +114,35 @@ export default class ReadlogPlugin extends Plugin {
 						await this.service.addEntry(book.file, values);
 						new Notice(`Added ${values.type} to ${book.title}`);
 					}).open();
-				});
+				}, { preferReading: true });
+			},
+		});
+
+		this.addCommand({
+			id: "mark-done",
+			name: "Mark book as done",
+			callback: () => {
+				void this.runForBook(async (book) => {
+					if (book.status === "done") {
+						new Notice(`${book.title} is already marked as done.`);
+						return;
+					}
+					const updated = await this.service.updateBook(book.file, {
+						title: book.title,
+						author: book.author,
+						status: "done",
+						progressUnit: book.progress_unit,
+						progressCurrent: book.progress_current,
+						progressTotal: book.progress_total,
+						medium: book.medium,
+						device: book.device,
+						tags: book.tags,
+						started: book.started,
+						finished: book.finished,
+						rating: book.rating,
+					});
+					new Notice(`Marked "${updated.title}" as done.`);
+				}, { preferReading: true });
 			},
 		});
 
@@ -174,13 +215,15 @@ export default class ReadlogPlugin extends Plugin {
 			}
 
 			const createMissingBooks = plan.creatableBooks > 0
-				? window.confirm(
+				? await ConfirmModal.prompt(
+					this.app,
+					`Import from ${selectedFile.name}`,
 					[
-						`Import Kindle clippings from ${selectedFile.name}?`,
-						`${plan.highlightsToImport} highlights and ${plan.notesToImport} notes are ready to import.`,
-						`Press OK to create ${plan.creatableBooks} new book note(s) for unmatched titles.`,
-						"Press Cancel to import only into existing matched books.",
-					].join("\n\n")
+						`${plan.highlightsToImport} highlights and ${plan.notesToImport} notes ready to import.`,
+						`Confirm to also create ${plan.creatableBooks} new book note(s) for unmatched titles.`,
+						`Cancel to import only into existing matched books.`,
+					].join("\n\n"),
+					{ confirmLabel: "Import and create", cancelLabel: "Import existing only" }
 				)
 				: true;
 
