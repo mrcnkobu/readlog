@@ -1,4 +1,4 @@
-import { Notice, Plugin } from "obsidian";
+import { Notice, Plugin, activeDocument } from "obsidian";
 import { parseKindleClippings } from "./src/kindle-clippings";
 import { AddBookModal, AddEntryModal, BookSuggestModal, ConfirmModal, EditBookModal, InfoModal, LogReadingSessionModal } from "./src/modals";
 import { ReadlogService } from "./src/readlog-service";
@@ -30,6 +30,8 @@ type PickerWindow = Window & {
 		types?: Array<{ description?: string; accept: Record<string, string[]> }>;
 	}) => Promise<Array<{ getFile: () => Promise<File> }>>;
 };
+
+const READLOG_HIDDEN_FILE_INPUT_CLASS = "readlog-hidden-file-input";
 
 export default class ReadlogPlugin extends Plugin {
 	settings!: ReadlogSettings;
@@ -315,10 +317,10 @@ export default class ReadlogPlugin extends Plugin {
 		}
 
 		return await new Promise((resolve, reject) => {
-			const input = document.createElement("input");
+			const input = activeDocument.createElement("input");
 			input.type = "file";
 			input.accept = ".txt,text/plain";
-			input.style.display = "none";
+			input.addClass(READLOG_HIDDEN_FILE_INPUT_CLASS);
 
 			let settled = false;
 			const finish = (value: { name: string; text: string } | null) => {
@@ -354,13 +356,13 @@ export default class ReadlogPlugin extends Plugin {
 						settled = true;
 						window.removeEventListener("focus", handleFocus);
 						input.remove();
-						reject(error);
+						reject(error instanceof Error ? error : new Error("Could not read the selected file."));
 					}
 				});
 			}, { once: true });
 
 			window.addEventListener("focus", handleFocus, { once: true });
-			document.body.appendChild(input);
+			activeDocument.body.appendChild(input);
 			input.click();
 		});
 	}

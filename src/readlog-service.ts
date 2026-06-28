@@ -80,7 +80,7 @@ export class ReadlogService {
 		const nextStarted = values.status === "reading" && !values.started ? this.currentDate() : values.started;
 		const nextFinished = values.status === "done" && !values.finished ? this.currentDate() : values.finished;
 
-		await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
+		await this.processBookFrontmatter(file, (frontmatter) => {
 			frontmatter.type = "book";
 			frontmatter.title = values.title;
 			frontmatter.author = values.author;
@@ -115,7 +115,7 @@ export class ReadlogService {
 
 	async deleteBook(file: TFile): Promise<void> {
 		await this.requireBook(file);
-		await this.app.vault.trash(file, false);
+		await this.app.fileManager.trashFile(file);
 	}
 
 	async logReadingSession(file: TFile, values: LogReadingSessionValues): Promise<LogReadingSessionResult> {
@@ -134,7 +134,7 @@ export class ReadlogService {
 			total: book.progress_total,
 		});
 
-		await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
+		await this.processBookFrontmatter(file, (frontmatter) => {
 			frontmatter.status = "reading";
 			frontmatter.progress_current = nextProgress.current;
 			setNumericOrEmpty(frontmatter, "progress_total", nextProgress.total);
@@ -629,6 +629,15 @@ export class ReadlogService {
 
 	private readFrontmatter(file: TFile): FrontMatterCache | null {
 		return this.app.metadataCache.getFileCache(file)?.frontmatter ?? null;
+	}
+
+	private async processBookFrontmatter(
+		file: TFile,
+		update: (frontmatter: Partial<BookFrontmatter> & Record<string, unknown>) => void
+	): Promise<void> {
+		await this.app.fileManager.processFrontMatter(file, (frontmatter: unknown) => {
+			update(frontmatter as Partial<BookFrontmatter> & Record<string, unknown>);
+		});
 	}
 
 	private async ensureFolder(path: string): Promise<void> {

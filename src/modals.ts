@@ -7,6 +7,7 @@ import {
 	Setting,
 	TextAreaComponent,
 	TextComponent,
+	activeDocument,
 } from "obsidian";
 import {
 	formatProgressPercent,
@@ -66,7 +67,7 @@ export class AddBookModal extends Modal {
 	onOpen() {
 		const { contentEl } = this;
 		contentEl.empty();
-		contentEl.createEl("h2", { text: "Add book" });
+		addModalHeading(contentEl, "Add book");
 
 		let titleInput: TextComponent | undefined;
 		new Setting(contentEl)
@@ -147,7 +148,7 @@ export class AddBookModal extends Modal {
 			});
 
 		this.scope.register([], "Enter", (evt) => {
-			if (document.activeElement?.tagName === "TEXTAREA") return;
+			if (isTextAreaActive()) return;
 			evt.preventDefault();
 			void this.submit();
 		});
@@ -216,7 +217,7 @@ export class EditBookModal extends Modal {
 	onOpen() {
 		const { contentEl } = this;
 		contentEl.empty();
-		contentEl.createEl("h2", { text: `Edit ${this.book.title}` });
+		addModalHeading(contentEl, `Edit ${this.book.title}`);
 
 		let titleInput: TextComponent | undefined;
 		createTextSetting(contentEl, "Title", this.titleValue, (value) => {
@@ -292,7 +293,7 @@ export class EditBookModal extends Modal {
 		this.renderButtons();
 
 		this.scope.register([], "Enter", (evt) => {
-			if (document.activeElement?.tagName === "TEXTAREA") return;
+			if (isTextAreaActive()) return;
 			evt.preventDefault();
 			void this.submit();
 		});
@@ -305,7 +306,7 @@ export class EditBookModal extends Modal {
 		if (!this.deleteConfirmState) {
 			new Setting(this.buttonRowEl)
 				.addButton((btn) => btn.setButtonText("Save").setCta().onClick(() => void this.submit()))
-				.addButton((btn) => btn.setButtonText("Delete").setWarning().onClick(() => {
+				.addButton((btn) => btn.setButtonText("Delete").setDestructive().onClick(() => {
 					this.deleteConfirmState = true;
 					this.renderButtons();
 				}))
@@ -314,7 +315,7 @@ export class EditBookModal extends Modal {
 			new Setting(this.buttonRowEl)
 				.setName("Delete this book?")
 				.setDesc("The note file will be trashed. Log entries will be kept.")
-				.addButton((btn) => btn.setButtonText("Confirm delete").setWarning().onClick(() => void this.deleteBook()))
+				.addButton((btn) => btn.setButtonText("Confirm delete").setDestructive().onClick(() => void this.deleteBook()))
 				.addButton((btn) => btn.setButtonText("Cancel").onClick(() => {
 					this.deleteConfirmState = false;
 					this.renderButtons();
@@ -371,7 +372,7 @@ export class LogReadingSessionModal extends Modal {
 	onOpen() {
 		const { contentEl } = this;
 		contentEl.empty();
-		contentEl.createEl("h2", { text: `Log session for ${this.book.title}` });
+		addModalHeading(contentEl, `Log session for ${this.book.title}`);
 
 		const currentSummary = this.describeCurrentProgress(this.book);
 		let progressInput: TextComponent | undefined;
@@ -418,7 +419,7 @@ export class LogReadingSessionModal extends Modal {
 			});
 
 		this.scope.register([], "Enter", (evt) => {
-			if (document.activeElement?.tagName === "TEXTAREA") return;
+			if (isTextAreaActive()) return;
 			evt.preventDefault();
 			void this.submit();
 		});
@@ -462,7 +463,7 @@ export class AddEntryModal extends Modal {
 	onOpen() {
 		const { contentEl } = this;
 		contentEl.empty();
-		contentEl.createEl("h2", { text: "Add entry" });
+		addModalHeading(contentEl, "Add entry");
 
 		const textContainer = contentEl.createDiv({ cls: "readlog-modal-textarea" });
 		textContainer.createEl("label", { text: "Text" });
@@ -499,7 +500,7 @@ export class AddEntryModal extends Modal {
 			});
 
 		this.scope.register([], "Enter", (evt) => {
-			if (document.activeElement?.tagName === "TEXTAREA") return;
+			if (isTextAreaActive()) return;
 			evt.preventDefault();
 			void this.submit();
 		});
@@ -550,7 +551,7 @@ export class ConfirmModal extends Modal {
 
 	onOpen() {
 		const { contentEl } = this;
-		contentEl.createEl("h2", { text: this.title });
+		addModalHeading(contentEl, this.title);
 		for (const paragraph of this.body.split("\n\n")) {
 			contentEl.createEl("p", { text: paragraph });
 		}
@@ -593,7 +594,7 @@ export class InfoModal extends Modal {
 
 	onOpen() {
 		const { contentEl } = this;
-		contentEl.createEl("h2", { text: this.title });
+		addModalHeading(contentEl, this.title);
 		for (const paragraph of this.body.split("\n\n")) {
 			contentEl.createEl("p", { text: paragraph });
 		}
@@ -624,6 +625,16 @@ function addProgressUnitOptions(dropdown: DropdownComponent) {
 	dropdown.addOption("page", "page");
 	dropdown.addOption("loc", "loc");
 	dropdown.addOption("percent", "percent");
+}
+
+function addModalHeading(container: HTMLElement, title: string) {
+	new Setting(container)
+		.setName(title)
+		.setHeading();
+}
+
+function isTextAreaActive(): boolean {
+	return activeDocument.activeElement?.tagName === "TEXTAREA";
 }
 
 function createTextSetting(

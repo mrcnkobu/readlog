@@ -17,7 +17,9 @@ export class ReadlogSettingTab extends PluginSettingTab {
 		const { containerEl } = this;
 		containerEl.empty();
 
-		containerEl.createEl("h2", { text: "Readlog settings" });
+		new Setting(containerEl)
+			.setName("Readlog settings")
+			.setHeading();
 
 		new Setting(containerEl)
 			.setName("Root folder")
@@ -95,7 +97,7 @@ export class ReadlogSettingTab extends PluginSettingTab {
 function debounce(fn: () => void, delay: number): () => void {
 	let timer: ReturnType<typeof setTimeout> | undefined;
 	return () => {
-		clearTimeout(timer);
+		window.clearTimeout(timer);
 		timer = window.setTimeout(fn, delay);
 	};
 }

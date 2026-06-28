@@ -1,3 +1,7 @@
+.readlog-hidden-file-input {
+	display: none;
+}
+
 .readlog-modal-textarea {
 	margin: 0 0 1rem;
 }

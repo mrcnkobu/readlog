@@ -10,6 +10,13 @@ const LEGACY_NAME_TOKEN_MAP: Array<[string, string]> = [
 
 const SHORT_WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 const LONG_WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"] as const;
+const DAILY_TEMPLATE_TOKENS = [
+	"{year}",
+	"{month}",
+	"{day}",
+	"{weekday_short}",
+	"{weekday_long}",
+] as const;
 
 export function sanitizeFilename(value: string): string {
 	return value
@@ -67,8 +74,8 @@ export function resolveDailyTemplate(template: string, date: string): string {
 	};
 
 	let output = template;
-	for (const [token, tokenValue] of Object.entries(replacements)) {
-		output = output.replaceAll(token, tokenValue);
+	for (const token of DAILY_TEMPLATE_TOKENS) {
+		output = output.replaceAll(token, replacements[token]);
 	}
 	return output;
 }
