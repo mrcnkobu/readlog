@@ -3,15 +3,22 @@ import {
 	DropdownComponent,
 	FuzzySuggestModal,
 	Modal,
+	Notice,
 	Setting,
 	TextAreaComponent,
 	TextComponent,
 } from "obsidian";
+import {
+	formatProgressPercent,
+	progressInputLabel,
+	progressUnitLabel,
+} from "./utils";
 import type {
 	AddBookValues,
 	AddEntryType,
 	AddEntryValues,
 	BookMedium,
+	BookProgressUnit,
 	BookRecord,
 	BookStatus,
 	EditBookValues,
@@ -44,7 +51,8 @@ export class BookSuggestModal extends FuzzySuggestModal<BookRecord> {
 export class AddBookModal extends Modal {
 	private titleValue = "";
 	private authorValue = "";
-	private pagesValue = "";
+	private progressUnitValue: BookProgressUnit = "page";
+	private progressTotalValue = "";
 	private tagsValue = "";
 	private statusValue: BookStatus = "to-read";
 	private mediumValue: BookMedium | null = null;
@@ -92,13 +100,18 @@ export class AddBookModal extends Modal {
 		}, "Optional, for example Kindle Paperwhite");
 
 		new Setting(contentEl)
-			.setName("Pages")
-			.addText((text) => {
-				text.inputEl.type = "number";
-				text.onChange((value) => {
-					this.pagesValue = value.trim();
+			.setName("Progress unit")
+			.addDropdown((dropdown) => {
+				addProgressUnitOptions(dropdown);
+				dropdown.setValue(this.progressUnitValue);
+				dropdown.onChange((value) => {
+					this.progressUnitValue = value as BookProgressUnit;
 				});
 			});
+
+		createNumericSetting(contentEl, "Progress total", this.progressTotalValue, (value) => {
+			this.progressTotalValue = value.trim();
+		}, "Optional for pages and locations. Percent books use 100.");
 
 		new Setting(contentEl)
 			.setName("Tags")
@@ -132,28 +145,32 @@ export class AddBookModal extends Modal {
 	}
 
 	private async submit() {
-		if (!this.titleValue) {
-			return;
-		}
+		await submitWithNotice(async () => {
+			if (!this.titleValue) {
+				throw new Error("Enter a book title.");
+			}
 
-		await this.onSubmit({
-			title: this.titleValue,
-			author: this.authorValue,
-			pages: toOptionalNumber(this.pagesValue),
-			tags: parseTags(this.tagsValue),
-			status: this.statusValue,
-			medium: this.mediumValue,
-			device: this.deviceValue || null,
+			await this.onSubmit({
+				title: this.titleValue,
+				author: this.authorValue,
+				progressUnit: this.progressUnitValue,
+				progressTotal: toOptionalNumber(this.progressTotalValue, "progress total"),
+				tags: parseTags(this.tagsValue),
+				status: this.statusValue,
+				medium: this.mediumValue,
+				device: this.deviceValue || null,
+			});
+			this.close();
 		});
-		this.close();
 	}
 }
 
 export class EditBookModal extends Modal {
 	private titleValue: string;
 	private authorValue: string;
-	private pagesValue: string;
-	private progressValue: string;
+	private progressUnitValue: BookProgressUnit;
+	private progressCurrentValue: string;
+	private progressTotalValue: string;
 	private tagsValue: string;
 	private statusValue: BookStatus;
 	private mediumValue: BookMedium | null;
@@ -171,8 +188,9 @@ export class EditBookModal extends Modal {
 		super(app);
 		this.titleValue = book.title;
 		this.authorValue = book.author;
-		this.pagesValue = book.pages ? String(book.pages) : "";
-		this.progressValue = String(book.progress);
+		this.progressUnitValue = book.progress_unit;
+		this.progressCurrentValue = String(book.progress_current);
+		this.progressTotalValue = book.progress_total === null ? "" : String(book.progress_total);
 		this.tagsValue = book.tags.join(", ");
 		this.statusValue = book.status;
 		this.mediumValue = book.medium;
@@ -209,13 +227,23 @@ export class EditBookModal extends Modal {
 			this.deviceValue = value.trim();
 		}, "Optional, for example Kindle Paperwhite");
 
-		createNumericSetting(contentEl, "Pages", this.pagesValue, (value) => {
-			this.pagesValue = value.trim();
+		new Setting(contentEl)
+			.setName("Progress unit")
+			.addDropdown((dropdown) => {
+				addProgressUnitOptions(dropdown);
+				dropdown.setValue(this.progressUnitValue);
+				dropdown.onChange((value) => {
+					this.progressUnitValue = value as BookProgressUnit;
+				});
+			});
+
+		createNumericSetting(contentEl, "Current progress", this.progressCurrentValue, (value) => {
+			this.progressCurrentValue = value.trim();
 		});
 
-		createNumericSetting(contentEl, "Progress", this.progressValue, (value) => {
-			this.progressValue = value.trim();
-		});
+		createNumericSetting(contentEl, "Progress total", this.progressTotalValue, (value) => {
+			this.progressTotalValue = value.trim();
+		}, "Optional for pages and locations. Percent books use 100.");
 
 		createTextSetting(contentEl, "Tags", this.tagsValue, (value) => {
 			this.tagsValue = value;
@@ -230,6 +258,12 @@ export class EditBookModal extends Modal {
 					this.statusValue = value;
 				});
 			});
+
+		if (this.book.progress_percent !== null) {
+			new Setting(contentEl)
+				.setName("Progress percent")
+				.setDesc(`${this.book.progress_percent}%`);
+		}
 
 		createTextSetting(contentEl, "Started", this.startedValue, (value) => {
 			this.startedValue = value.trim();
@@ -260,24 +294,27 @@ export class EditBookModal extends Modal {
 	}
 
 	private async submit() {
-		if (!this.titleValue) {
-			return;
-		}
+		await submitWithNotice(async () => {
+			if (!this.titleValue) {
+				throw new Error("Enter a book title.");
+			}
 
-		await this.onSubmit({
-			title: this.titleValue,
-			author: this.authorValue,
-			pages: toOptionalNumber(this.pagesValue),
-			progress: toRequiredNumber(this.progressValue, this.book.progress),
-			medium: this.mediumValue,
-			device: this.deviceValue || null,
-			tags: parseTags(this.tagsValue),
-			status: this.statusValue,
-			started: this.startedValue || null,
-			finished: this.finishedValue || null,
-			rating: toOptionalNumber(this.ratingValue),
+			await this.onSubmit({
+				title: this.titleValue,
+				author: this.authorValue,
+				progressUnit: this.progressUnitValue,
+				progressCurrent: toRequiredNumber(this.progressCurrentValue, "current progress"),
+				progressTotal: toOptionalNumber(this.progressTotalValue, "progress total"),
+				medium: this.mediumValue,
+				device: this.deviceValue || null,
+				tags: parseTags(this.tagsValue),
+				status: this.statusValue,
+				started: this.startedValue || null,
+				finished: this.finishedValue || null,
+				rating: toOptionalNumber(this.ratingValue, "rating"),
+			});
+			this.close();
 		});
-		this.close();
 	}
 
 	private async deleteBook() {
@@ -285,13 +322,15 @@ export class EditBookModal extends Modal {
 			return;
 		}
 
-		await this.onDelete();
-		this.close();
+		await submitWithNotice(async () => {
+			await this.onDelete();
+			this.close();
+		});
 	}
 }
 
 export class LogReadingSessionModal extends Modal {
-	private newPageValue: string;
+	private newProgressCurrentValue: string;
 	private minutesSpentValue = "";
 	private noteValue = "";
 
@@ -301,7 +340,7 @@ export class LogReadingSessionModal extends Modal {
 		private readonly onSubmit: (values: LogReadingSessionValues) => Promise<void>
 	) {
 		super(app);
-		this.newPageValue = String(book.progress);
+		this.newProgressCurrentValue = String(book.progress_current);
 	}
 
 	onOpen() {
@@ -309,14 +348,15 @@ export class LogReadingSessionModal extends Modal {
 		contentEl.empty();
 		contentEl.createEl("h2", { text: `Log session for ${this.book.title}` });
 
+		const currentSummary = this.describeCurrentProgress(this.book);
 		new Setting(contentEl)
-			.setName("New current page")
-			.setDesc(`Current progress: ${this.book.progress}${this.book.pages ? ` / ${this.book.pages}` : ""}`)
+			.setName(`New current ${progressInputLabel(this.book.progress_unit)}`)
+			.setDesc(currentSummary)
 			.addText((text) => {
 				text.inputEl.type = "number";
-				text.setValue(this.newPageValue);
+				text.setValue(this.newProgressCurrentValue);
 				text.onChange((value) => {
-					this.newPageValue = value.trim();
+					this.newProgressCurrentValue = value.trim();
 				});
 			});
 
@@ -351,13 +391,21 @@ export class LogReadingSessionModal extends Modal {
 			});
 	}
 
+	private describeCurrentProgress(book: BookRecord): string {
+		const totalPart = book.progress_total === null ? "" : ` / ${book.progress_total}`;
+		const percentPart = formatProgressPercent(book.progress_percent);
+		return `Current ${progressUnitLabel(book.progress_unit)}: ${book.progress_current}${totalPart}${percentPart ? ` (${percentPart})` : ""}`;
+	}
+
 	private async submit() {
-		await this.onSubmit({
-			newPage: toRequiredNumber(this.newPageValue, this.book.progress),
-			minutesSpent: toOptionalNumber(this.minutesSpentValue),
-			note: this.noteValue || null,
+		await submitWithNotice(async () => {
+			await this.onSubmit({
+				newProgressCurrent: toRequiredNumber(this.newProgressCurrentValue, "new current progress"),
+				minutesSpent: toOptionalNumber(this.minutesSpentValue, "minutes spent"),
+				note: this.noteValue || null,
+			});
+			this.close();
 		});
-		this.close();
 	}
 }
 
@@ -411,16 +459,18 @@ export class AddEntryModal extends Modal {
 	}
 
 	private async submit() {
-		if (!this.textValue) {
-			return;
-		}
+		await submitWithNotice(async () => {
+			if (!this.textValue) {
+				throw new Error("Enter note or citation text.");
+			}
 
-		await this.onSubmit({
-			type: this.typeValue,
-			text: this.textValue,
-			locator: this.locatorValue || null,
+			await this.onSubmit({
+				type: this.typeValue,
+				text: this.textValue,
+				locator: this.locatorValue || null,
+			});
+			this.close();
 		});
-		this.close();
 	}
 }
 
@@ -435,6 +485,12 @@ function addBookMediumOptions(dropdown: DropdownComponent) {
 	dropdown.addOption("", "-");
 	dropdown.addOption("print", "print");
 	dropdown.addOption("ebook", "ebook");
+}
+
+function addProgressUnitOptions(dropdown: DropdownComponent) {
+	dropdown.addOption("page", "page");
+	dropdown.addOption("loc", "loc");
+	dropdown.addOption("percent", "percent");
 }
 
 function createTextSetting(
@@ -457,10 +513,12 @@ function createNumericSetting(
 	container: HTMLElement,
 	name: string,
 	value: string,
-	onChange: (value: string) => void
+	onChange: (value: string) => void,
+	description?: string
 ) {
 	new Setting(container)
 		.setName(name)
+		.setDesc(description ?? "")
 		.addText((text: TextComponent) => {
 			text.inputEl.type = "number";
 			text.setValue(value);
@@ -475,16 +533,34 @@ function parseTags(value: string): string[] {
 		.filter(Boolean);
 }
 
-function toOptionalNumber(value: string): number | null {
+async function submitWithNotice(action: () => Promise<void>): Promise<void> {
+	try {
+		await action();
+	} catch (error) {
+		new Notice(error instanceof Error ? error.message : "Readlog command failed");
+	}
+}
+
+function toOptionalNumber(value: string, label: string): number | null {
 	if (!value) {
 		return null;
 	}
 
 	const parsed = Number(value);
-	return Number.isFinite(parsed) ? parsed : null;
+	if (!Number.isFinite(parsed)) {
+		throw new Error(`Enter a valid ${label}.`);
+	}
+	return parsed;
 }
 
-function toRequiredNumber(value: string, fallback: number): number {
+function toRequiredNumber(value: string, label: string): number {
+	if (!value) {
+		throw new Error(`Enter ${label}.`);
+	}
+
 	const parsed = Number(value);
-	return Number.isFinite(parsed) ? parsed : fallback;
+	if (!Number.isFinite(parsed)) {
+		throw new Error(`Enter a valid ${label}.`);
+	}
+	return parsed;
 }

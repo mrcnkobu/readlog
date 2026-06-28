@@ -3,6 +3,7 @@ import type { TFile } from "obsidian";
 export type BookStatus = "to-read" | "reading" | "done" | "abandoned";
 export type AddEntryType = "note" | "citation";
 export type BookMedium = "print" | "ebook";
+export type BookProgressUnit = "page" | "loc" | "percent";
 export type KindleClippingKind = "highlight" | "note" | "bookmark";
 
 export interface ReadlogSettings {
@@ -32,8 +33,10 @@ export interface BookFrontmatter {
 	started: string | null;
 	finished: string | null;
 	rating: number | null;
-	pages: number | null;
-	progress: number;
+	progress_unit: BookProgressUnit;
+	progress_current: number;
+	progress_total: number | null;
+	progress_percent: number | null;
 	medium: BookMedium | null;
 	device: string | null;
 	tags: string[];
@@ -46,7 +49,8 @@ export interface BookRecord extends BookFrontmatter {
 export interface AddBookValues {
 	title: string;
 	author: string;
-	pages: number | null;
+	progressUnit: BookProgressUnit;
+	progressTotal: number | null;
 	tags: string[];
 	status: BookStatus;
 	medium: BookMedium | null;
@@ -57,8 +61,9 @@ export interface EditBookValues {
 	title: string;
 	author: string;
 	status: BookStatus;
-	pages: number | null;
-	progress: number;
+	progressUnit: BookProgressUnit;
+	progressCurrent: number;
+	progressTotal: number | null;
 	medium: BookMedium | null;
 	device: string | null;
 	tags: string[];
@@ -68,7 +73,7 @@ export interface EditBookValues {
 }
 
 export interface LogReadingSessionValues {
-	newPage: number;
+	newProgressCurrent: number;
 	minutesSpent: number | null;
 	note: string | null;
 }

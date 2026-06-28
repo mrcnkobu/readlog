@@ -6,6 +6,7 @@ import type {
 	AddEntryValues,
 	BookFrontmatter,
 	BookMedium,
+	BookProgressUnit,
 	BookRecord,
 	BookStatus,
 	EditBookValues,
@@ -18,7 +19,12 @@ import type {
 	ReadlogSettings,
 } from "./types";
 import {
+	formatProgressPercent,
+	normalizeBookProgress,
+	normalizeBookProgressFrontmatter,
 	normalizeMarkdownHeading,
+	progressDeltaLabel,
+	progressUnitLabel,
 	resolveDailyTemplate,
 	sanitizeFilename,
 	serializeFrontmatter,
@@ -33,8 +39,12 @@ export class ReadlogService {
 	async createBook(values: AddBookValues): Promise<TFile> {
 		const settings = this.getSettings();
 		await this.ensureFolder(this.booksFolderPath(settings));
-		this.validateProgress(0, values.pages);
 
+		const progress = normalizeBookProgress({
+			unit: values.progressUnit,
+			current: 0,
+			total: values.progressTotal,
+		});
 		const date = this.currentDate();
 		const book: BookFrontmatter = {
 			type: "book",
@@ -45,8 +55,10 @@ export class ReadlogService {
 			started: values.status === "reading" ? date : null,
 			finished: null,
 			rating: null,
-			pages: values.pages,
-			progress: 0,
+			progress_unit: progress.unit,
+			progress_current: progress.current,
+			progress_total: progress.total,
+			progress_percent: progress.percent,
 			medium: values.medium,
 			device: values.device,
 			tags: values.tags,
@@ -59,7 +71,11 @@ export class ReadlogService {
 
 	async updateBook(file: TFile, values: EditBookValues): Promise<BookRecord> {
 		const current = await this.requireBook(file);
-		this.validateProgress(values.progress, values.pages);
+		const progress = normalizeBookProgress({
+			unit: values.progressUnit,
+			current: values.progressCurrent,
+			total: values.progressTotal,
+		});
 
 		const nextStarted = values.status === "reading" && !values.started ? this.currentDate() : values.started;
 		const nextFinished = values.status === "done" && !values.finished ? this.currentDate() : values.finished;
@@ -70,8 +86,10 @@ export class ReadlogService {
 			frontmatter.author = values.author;
 			frontmatter.status = values.status;
 			frontmatter.added = current.added;
-			setNumericOrEmpty(frontmatter, "pages", values.pages);
-			frontmatter.progress = values.progress;
+			frontmatter.progress_unit = progress.unit;
+			frontmatter.progress_current = progress.current;
+			setNumericOrEmpty(frontmatter, "progress_total", progress.total);
+			setNumericOrEmpty(frontmatter, "progress_percent", progress.percent);
 			setStringOrEmpty(frontmatter, "medium", values.medium);
 			setStringOrEmpty(frontmatter, "device", values.device);
 			frontmatter.tags = values.tags;
@@ -102,27 +120,25 @@ export class ReadlogService {
 
 	async logReadingSession(file: TFile, values: LogReadingSessionValues): Promise<LogReadingSessionResult> {
 		const book = await this.requireBook(file);
-		const totalPages = book.pages;
-
-		if (!totalPages || totalPages <= 0) {
-			throw new Error("Set the book page count before logging a session.");
-		}
-
-		if (values.newPage < book.progress) {
-			throw new Error("New current page cannot be lower than current progress.");
-		}
-
-		if (values.newPage > totalPages) {
-			throw new Error("New current page cannot exceed total pages.");
+		if (values.newProgressCurrent < book.progress_current) {
+			throw new Error("New current progress cannot be lower than current progress.");
 		}
 
 		if (values.minutesSpent !== null && values.minutesSpent < 0) {
 			throw new Error("Minutes spent cannot be negative.");
 		}
 
+		const nextProgress = normalizeBookProgress({
+			unit: book.progress_unit,
+			current: values.newProgressCurrent,
+			total: book.progress_total,
+		});
+
 		await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
 			frontmatter.status = "reading";
-			frontmatter.progress = values.newPage;
+			frontmatter.progress_current = nextProgress.current;
+			setNumericOrEmpty(frontmatter, "progress_total", nextProgress.total);
+			setNumericOrEmpty(frontmatter, "progress_percent", nextProgress.percent);
 			if (!frontmatter.started) {
 				frontmatter.started = this.currentDate();
 			}
@@ -130,24 +146,51 @@ export class ReadlogService {
 
 		const date = this.currentDate();
 		const time = this.currentTime();
-		const delta = values.newPage - book.progress;
+		const delta = nextProgress.current - book.progress_current;
 		const logEntry = this.buildReadingLogEntry(
 			book.title,
-			book.progress,
-			values.newPage,
+			book.progress_unit,
+			book.progress_current,
+			nextProgress.current,
 			delta,
+			book.progress_percent,
+			nextProgress.percent,
 			time,
 			values.minutesSpent,
 			values.note
 		);
 		await this.appendReadingLog(date, logEntry);
-		await this.appendDailyNote(
+		const dailyNotePath = await this.appendDailyNote(
 			date,
-			this.buildDailyNoteEntry(book.file.basename, book.progress, values.newPage, time, values.minutesSpent)
+			this.buildDailyNoteEntry(
+				book.file.basename,
+				book.progress_unit,
+				book.progress_current,
+				nextProgress.current,
+				book.progress_percent,
+				nextProgress.percent,
+				time,
+				values.minutesSpent
+			)
+		);
+		await this.appendBookLog(
+			file,
+			this.buildBookLogEntry(
+				date,
+				book.progress_unit,
+				book.progress_current,
+				nextProgress.current,
+				book.progress_percent,
+				nextProgress.percent,
+				time,
+				values.minutesSpent,
+				this.dailyNoteLinkTarget(dailyNotePath),
+				values.note
+			)
 		);
 
 		return {
-			reachedEnd: values.newPage === totalPages,
+			reachedEnd: nextProgress.percent === 100,
 		};
 	}
 
@@ -330,7 +373,8 @@ export class ReadlogService {
 		const file = await this.createBook({
 			title,
 			author: author ?? "",
-			pages: null,
+			progressUnit: "loc",
+			progressTotal: null,
 			tags: [],
 			status: "to-read",
 			medium: "ebook",
@@ -378,52 +422,113 @@ export class ReadlogService {
 		await this.app.vault.adapter.write(path, updated);
 	}
 
-	private async appendDailyNote(date: string, entry: string): Promise<void> {
-		const settings = this.getSettings();
-		const resolvedFolder = resolveDailyTemplate(settings.dailyNotesFolderTemplate, date);
-		await this.ensureFolder(resolvedFolder);
+	private async appendBookLog(file: TFile, entry: string): Promise<void> {
+		const content = await this.app.vault.read(file);
+		const updated = appendToNamedSection(content, "Log", entry);
+		await this.app.vault.modify(file, updated);
+	}
 
-		const resolvedName = resolveDailyTemplate(settings.dailyNoteNameTemplate, date);
-		const path = normalizePath(`${resolvedFolder}/${resolvedName}.md`);
+	private async appendDailyNote(date: string, entry: string): Promise<string> {
+		const settings = this.getSettings();
+		const path = this.resolveDailyNotePath(date);
+		const resolvedFolder = normalizePath(path.split("/").slice(0, -1).join("/"));
+		await this.ensureFolder(resolvedFolder);
 		const existing = await this.readOrCreate(path, "");
 		const updated = appendToHeadingLine(existing, normalizeMarkdownHeading(settings.dailyNoteHeading), entry);
 		await this.app.vault.adapter.write(path, updated);
+		return path;
+	}
+
+	private resolveDailyNotePath(date: string): string {
+		const settings = this.getSettings();
+		const resolvedFolder = resolveDailyTemplate(settings.dailyNotesFolderTemplate, date);
+		const resolvedName = resolveDailyTemplate(settings.dailyNoteNameTemplate, date);
+		return normalizePath(`${resolvedFolder}/${resolvedName}.md`);
+	}
+
+	private dailyNoteLinkTarget(path: string): string {
+		return path.endsWith(".md") ? path.slice(0, -3) : path;
 	}
 
 	private buildDailyNoteEntry(
 		bookBasename: string,
-		previousPage: number,
-		newPage: number,
+		unit: BookProgressUnit,
+		previousCurrent: number,
+		newCurrent: number,
+		previousPercent: number | null,
+		newPercent: number | null,
 		time: string,
 		minutesSpent: number | null
 	): string {
-		const meta = [`*${time}*`];
+		const meta = [this.buildPercentRange(previousPercent, newPercent), `*${time}*`].filter(Boolean) as string[];
 		if (minutesSpent !== null) {
 			meta.push(`*${minutesSpent} min*`);
 		}
 
-		return `- [[${bookBasename}]] - *pages* ${previousPage}-${newPage} (${meta.join(", ")})`;
+		return `- [[${bookBasename}]] - *${progressUnitLabel(unit)}* ${previousCurrent}-${newCurrent} (${meta.join(", ")})`;
 	}
 
 	private buildReadingLogEntry(
 		title: string,
-		previousPage: number,
-		newPage: number,
+		unit: BookProgressUnit,
+		previousCurrent: number,
+		newCurrent: number,
 		delta: number,
+		previousPercent: number | null,
+		newPercent: number | null,
 		time: string,
 		minutesSpent: number | null,
 		note: string | null
 	): string {
-		const meta = [`*${delta} pages*`, `*${time}*`];
+		const meta = [
+			`*${progressDeltaLabel(unit, delta)}*`,
+			this.buildPercentRange(previousPercent, newPercent),
+			`*${time}*`,
+		].filter(Boolean) as string[];
 		if (minutesSpent !== null) {
-			meta.splice(1, 0, `*${minutesSpent} min*`);
+			meta.splice(2, 0, `*${minutesSpent} min*`);
 		}
 
-		const lines = [`- **${title}** - *pages* ${previousPage}-${newPage} (${meta.join(", ")})`];
+		const lines = [`- **${title}** - *${progressUnitLabel(unit)}* ${previousCurrent}-${newCurrent} (${meta.join(", ")})`];
 		if (note) {
 			lines.push(`  > ${note}`);
 		}
 		return lines.join("\n");
+	}
+
+	private buildBookLogEntry(
+		date: string,
+		unit: BookProgressUnit,
+		previousCurrent: number,
+		newCurrent: number,
+		previousPercent: number | null,
+		newPercent: number | null,
+		time: string,
+		minutesSpent: number | null,
+		dailyNoteLink: string,
+		note: string | null
+	): string {
+		const meta = [this.buildPercentRange(previousPercent, newPercent), `*${time}*`].filter(Boolean) as string[];
+		if (minutesSpent !== null) {
+			meta.push(`*${minutesSpent} min*`);
+		}
+
+		const lines = [
+			`- *${date}* - *${progressUnitLabel(unit)}* ${previousCurrent}-${newCurrent} (${meta.join(", ")}) · [[${dailyNoteLink}|daily]]`,
+		];
+		if (note) {
+			lines.push(`  > ${note}`);
+		}
+		return lines.join("\n");
+	}
+
+	private buildPercentRange(previousPercent: number | null, newPercent: number | null): string | null {
+		const previous = formatProgressPercent(previousPercent);
+		const next = formatProgressPercent(newPercent);
+		if (!previous || !next) {
+			return null;
+		}
+		return `*${previous}-${next}*`;
 	}
 
 	private buildNoteEntry(date: string, text: string, locator: string | null): string {
@@ -486,8 +591,7 @@ export class ReadlogService {
 		const started = readNullableString(frontmatter, "started");
 		const finished = readNullableString(frontmatter, "finished");
 		const rating = readNullableNumber(frontmatter, "rating");
-		const pages = readNullableNumber(frontmatter, "pages");
-		const progress = readNullableNumber(frontmatter, "progress") ?? 0;
+		const progress = normalizeBookProgressFrontmatter(frontmatter);
 		const medium = readBookMedium(frontmatter.medium);
 		const device = readNullableString(frontmatter, "device");
 		const tags = readStringArray(frontmatter, "tags");
@@ -501,8 +605,10 @@ export class ReadlogService {
 			started,
 			finished,
 			rating,
-			pages,
-			progress,
+			progress_unit: progress.unit,
+			progress_current: progress.current,
+			progress_total: progress.total,
+			progress_percent: progress.percent,
 			medium,
 			device,
 			tags,
@@ -563,20 +669,6 @@ export class ReadlogService {
 			}
 
 			suffix += 1;
-		}
-	}
-
-	private validateProgress(progress: number, pages: number | null) {
-		if (progress < 0) {
-			throw new Error("Progress cannot be negative.");
-		}
-
-		if (pages !== null && pages < 0) {
-			throw new Error("Pages cannot be negative.");
-		}
-
-		if (pages !== null && progress > pages) {
-			throw new Error("Progress cannot exceed total pages.");
 		}
 	}
 

@@ -1,6 +1,6 @@
 # Readlog
 
-Readlog is an [Obsidian](https://obsidian.md) plugin for tracking books in plain markdown. It keeps one note per book, appends reading sessions to a vault-native reading log, optionally writes a plain text line into your daily note, and can import Kindle highlights and notes from a local `My Clippings.txt` file.
+Readlog is an [Obsidian](https://obsidian.md) plugin for tracking books in plain markdown. It keeps one note per book, appends reading sessions to a vault-native reading log, writes a compact session line into the book note and into your daily note, and can import Kindle highlights and notes from a local `My Clippings.txt` file.
 
 ## Scope
 
@@ -33,13 +33,16 @@ The detailed product spec lives in [docs/spec.md](./docs/spec.md).
 - Frontmatter-backed book metadata
 - Manual cover support through a standard `## Cover` section
 - Book metadata for `medium` and `device`
+- Unit-based progress tracking with `page`, `loc`, or `percent`
+- Stored computed `progress_percent` in frontmatter
+- Session logs that include both the unit range and the percent range
+- Per-book `## Log` entries with a subtle backlink to the corresponding daily note
 - Conservative file writes that preserve manual edits
 - Delete-book action that trashes only the book note and leaves historical logs intact
 - Configurable root folder and daily note integration
 - Shortcode-based daily note folder and filename templates
-- Timestamped session logging in daily notes and the reading log
 - Local Kindle import that does not touch `reading-log.md` or daily notes
-- Testable pure helpers for section insertion, daily note templates, and My Clippings parsing
+- Testable pure helpers for section insertion, daily note templates, My Clippings parsing, and progress normalization
 
 ## Installation
 
@@ -85,10 +88,37 @@ npm run verify
 | Command | Description |
 |---|---|
 | `Add book` | Create a new book note with frontmatter, `## Cover`, and the standard sections |
-| `Edit book` | Update metadata such as status, medium, device, progress, pages, tags, rating, and dates, or delete the book note |
-| `Log reading session` | Update reading progress, capture optional minutes spent, append to `reading-log.md`, and append a timestamped line to today’s daily note |
+| `Edit book` | Update metadata such as status, medium, device, progress unit, current progress, progress total, rating, and dates, or delete the book note |
+| `Log reading session` | Update reading progress, capture optional minutes spent, append to `reading-log.md`, append a timestamped line to today’s daily note, and add the same session to the book note `## Log` section |
 | `Add entry` | Append a note or citation under the correct section in the selected book note |
 | `Import Kindle Clippings` | Pick a local `My Clippings.txt` file, import new highlights and notes, match existing books conservatively, and optionally create missing book notes |
+
+## Progress model
+
+Readlog tracks one active progress unit per book:
+
+- `page`
+- `loc`
+- `percent`
+
+Example frontmatter:
+
+```md
+---
+progress_unit: loc
+progress_current: 1845
+progress_total: 3200
+progress_percent: 58
+---
+```
+
+Example session output:
+
+```md
+- [[Deep Work]] - *locations* 1845-1910 (*58%-60%*, *21:14*, *35 min*)
+- **Deep Work** - *locations* 1845-1910 (*65 loc*, *58%-60%*, *21:14*, *35 min*)
+- *2026-03-29* - *locations* 1845-1910 (*58%-60%*, *21:14*, *35 min*) · [[2026-03/2026-03-29_Sun|daily]]
+```
 
 ## Daily note templates
 

@@ -52,7 +52,7 @@ export function appendReadingLogEntry(content: string, date: string, entry: stri
 }
 
 export function formatBookNoteContent(frontmatter: string): string {
-	return `${frontmatter}\n\n## Cover\n\n## Notes\n\n## Citations\n\n## Highlights\n`;
+	return `${frontmatter}\n\n## Cover\n\n## Notes\n\n## Citations\n\n## Highlights\n\n## Log\n`;
 }
 
 function normalizeNewlines(value: string): string {

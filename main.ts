@@ -84,7 +84,7 @@ export default class ReadlogPlugin extends Plugin {
 						const result = await this.service.logReadingSession(book.file, values);
 						new Notice(
 							result.reachedEnd
-								? `Logged session for ${book.title}. Book reached its total pages; consider marking it done.`
+								? `Logged session for ${book.title}. Book reached 100% progress; consider marking it done.`
 								: `Logged session for ${book.title}`
 						);
 					}).open();
@@ -347,7 +347,9 @@ export default class ReadlogPlugin extends Plugin {
 			}
 
 			new BookSuggestModal(this.app, selectable, (book) => {
-				void callback(book);
+				void callback(book).catch((error) => {
+					new Notice(error instanceof Error ? error.message : "Readlog command failed");
+				});
 			}).open();
 		} catch (error) {
 			new Notice(error instanceof Error ? error.message : "Readlog command failed");

@@ -55,13 +55,13 @@ test("appendToHeadingLine supports custom markdown headings", () => {
 		"",
 		"##### *Reading*",
 		"",
-		"- [[Book A]] - *pages* 10-20 (*21:10*)",
+		"- [[Book A]] - *locations* 10-20 (*25%-50%*, *21:10*)",
 		"",
 		"## Other",
 		"",
 	].join("\n");
 
-	const output = appendToHeadingLine(input, "##### *Reading*", "- [[Book B]] - *pages* 20-30 (*21:40*, *30 min*)");
+	const output = appendToHeadingLine(input, "##### *Reading*", "- [[Book B]] - *pages* 20-30 (*40%-60%*, *21:40*, *30 min*)");
 
 	assert.equal(
 		output,
@@ -70,8 +70,8 @@ test("appendToHeadingLine supports custom markdown headings", () => {
 			"",
 			"##### *Reading*",
 			"",
-			"- [[Book A]] - *pages* 10-20 (*21:10*)",
-			"- [[Book B]] - *pages* 20-30 (*21:40*, *30 min*)",
+			"- [[Book A]] - *locations* 10-20 (*25%-50%*, *21:10*)",
+			"- [[Book B]] - *pages* 20-30 (*40%-60%*, *21:40*, *30 min*)",
 			"",
 			"## Other",
 			"",
@@ -85,10 +85,10 @@ test("appendReadingLogEntry appends to an existing date section", () => {
 		"# Reading Log",
 		"",
 		"## 2026-03-26",
-		"- **Book A** - *pages* 1-10 (*9 pages*, *20:10*)",
+		"- **Book A** - *pages* 1-10 (*9 pages*, *10%-20%*, *20:10*)",
 	].join("\n");
 
-	const output = appendReadingLogEntry(input, "2026-03-26", "- **Book B** - *pages* 10-20 (*10 pages*, *20:40*)");
+	const output = appendReadingLogEntry(input, "2026-03-26", "- **Book B** - *locations* 10-20 (*10 loc*, *30%-40%*, *20:40*)");
 
 	assert.equal(
 		output,
@@ -96,8 +96,8 @@ test("appendReadingLogEntry appends to an existing date section", () => {
 			"# Reading Log",
 			"",
 			"## 2026-03-26",
-			"- **Book A** - *pages* 1-10 (*9 pages*, *20:10*)",
-			"- **Book B** - *pages* 10-20 (*10 pages*, *20:40*)",
+			"- **Book A** - *pages* 1-10 (*9 pages*, *10%-20%*, *20:10*)",
+			"- **Book B** - *locations* 10-20 (*10 loc*, *30%-40%*, *20:40*)",
 			"",
 		].join("\n")
 	);
@@ -108,10 +108,10 @@ test("appendReadingLogEntry creates a new date section at the end", () => {
 		"# Reading Log",
 		"",
 		"## 2026-03-24",
-		"- **Book A** - *pages* 1-10 (*9 pages*, *20:10*)",
+		"- **Book A** - *pages* 1-10 (*9 pages*, *10%-20%*, *20:10*)",
 	].join("\n");
 
-	const output = appendReadingLogEntry(input, "2026-03-26", "- **Book B** - *pages* 10-20 (*10 pages*, *20:40*)");
+	const output = appendReadingLogEntry(input, "2026-03-26", "- **Book B** - *pages* 10-20 (*10 pages*, *20%-30%*, *20:40*)");
 
 	assert.equal(
 		output,
@@ -119,10 +119,10 @@ test("appendReadingLogEntry creates a new date section at the end", () => {
 			"# Reading Log",
 			"",
 			"## 2026-03-24",
-			"- **Book A** - *pages* 1-10 (*9 pages*, *20:10*)",
+			"- **Book A** - *pages* 1-10 (*9 pages*, *10%-20%*, *20:10*)",
 			"",
 			"## 2026-03-26",
-			"- **Book B** - *pages* 10-20 (*10 pages*, *20:40*)",
+			"- **Book B** - *pages* 10-20 (*10 pages*, *20%-30%*, *20:40*)",
 			"",
 		].join("\n")
 	);
@@ -145,6 +145,8 @@ test("formatBookNoteContent provides the standard note body", () => {
 			"## Citations",
 			"",
 			"## Highlights",
+			"",
+			"## Log",
 			"",
 		].join("\n")
 	);

@@ -1,6 +1,6 @@
 # Readlog Specification
 
-Last updated: 2026-03-26
+Last updated: 2026-03-29
 
 ## Philosophy
 
@@ -36,12 +36,14 @@ type: book
 title: The Pragmatic Programmer
 author: David Thomas, Andrew Hunt
 status: reading
-added: 2026-03-26
-started: 2026-03-26
+added: 2026-03-29
+started: 2026-03-29
 finished:
 rating:
-pages: 352
-progress: 145
+progress_unit: loc
+progress_current: 1450
+progress_total: 3200
+progress_percent: 45
 medium: ebook
 device: Kindle Paperwhite
 tags: [programming, craftsmanship]
@@ -54,9 +56,28 @@ tags: [programming, craftsmanship]
 ## Citations
 
 ## Highlights
+
+## Log
 ```
 
 The `## Cover` section is intentionally manual. Readlog creates the heading, but it does not manage cover images or special cover metadata. If you want a cover, paste an Obsidian image embed there yourself.
+
+### Progress model
+
+Readlog tracks one active progress unit per book:
+
+- `page`
+- `loc`
+- `percent`
+
+Field rules:
+
+- `progress_unit` defines what `progress_current` and `progress_total` mean
+- `progress_current` is the current reading position
+- `progress_total` is the total size of the book in that unit
+- `progress_percent` is computed by the plugin and stored in frontmatter
+- for `percent` books, Readlog keeps `progress_total` at `100`
+- for `page` and `loc` books, `progress_percent` is only meaningful when `progress_total` is set
 
 ### Status values
 
@@ -77,7 +98,8 @@ Inputs:
 - author
 - medium
 - device
-- total pages
+- progress unit
+- progress total
 - tags
 - initial status
 
@@ -85,7 +107,8 @@ Behavior:
 
 - sets `added` to today
 - sets `started` to today if the initial status is `reading`
-- initializes `progress` to `0`
+- initializes `progress_current` to `0`
+- computes `progress_percent`
 - creates the standard body sections, including `## Cover`
 
 #### `Readlog: Edit book`
@@ -99,8 +122,9 @@ Editable fields:
 - medium
 - device
 - status
-- pages
-- progress
+- progress unit
+- current progress
+- progress total
 - tags
 - started
 - finished
@@ -108,6 +132,7 @@ Editable fields:
 
 Behavior rules:
 
+- recalculates `progress_percent`
 - if status becomes `reading` and `started` is empty, set it to today
 - if status becomes `done` and `finished` is empty, set it to today
 - if title changes, rename the note file conservatively
@@ -121,19 +146,50 @@ Logs a reading session for a book.
 Inputs:
 
 - book
-- new current page
+- new current progress
 - optional minutes spent
 - optional short session note
 
 Behavior:
 
-- reads the previous page from `progress`
-- updates `progress` to the new current page
+- reads the previous position from `progress_current`
+- updates `progress_current`
+- recalculates `progress_percent`
 - sets `status: reading` if needed
 - sets `started` if empty
 - appends a new entry to `Reading/reading-log.md`
 - appends one timestamped line to today’s daily note
-- suggests finishing the book when progress reaches total pages
+- appends one compact session entry under `## Log` in the book note
+- includes the percent range from the previous position to the new one
+- includes a subtle backlink from the book note log entry to the corresponding daily note
+- suggests finishing the book when progress reaches `100%`
+
+Example daily note output:
+
+```md
+##### *Reading*
+
+- [[The Pragmatic Programmer]] - *locations* 1450-1520 (*45%-48%*, *21:14*, *35 min*)
+```
+
+Example reading-log output:
+
+```md
+# Reading Log
+
+## 2026-03-29
+- **The Pragmatic Programmer** - *locations* 1450-1520 (*70 loc*, *45%-48%*, *21:14*, *35 min*)
+  > Orthogonality section is dense, need to revisit tomorrow.
+```
+
+Example book-note log output:
+
+```md
+## Log
+
+- *2026-03-29* - *locations* 1450-1520 (*45%-48%*, *21:14*, *35 min*) · [[2026-03/2026-03-29_Sun|daily]]
+  > Orthogonality section is dense, need to revisit tomorrow.
+```
 
 #### `Readlog: Add entry`
 
@@ -147,7 +203,7 @@ Entry types:
 For notes, Readlog appends:
 
 ```md
-**2026-03-26** - Your note text here.
+**2026-03-29** - Your note text here.
 ```
 
 For citations, Readlog appends:
@@ -160,35 +216,11 @@ The locator is optional and may also be a Kindle location such as `loc.1845-1848
 
 ### `reading-log.md`
 
-This file is append-only and oldest-first.
-
-Example:
-
-```md
-# Reading Log
-
-## 2026-03-24
-- **Dune** - *pages* 1-40 (*39 pages*, *20:10*)
-  > Slow start but the world-building is already pulling me in.
-
-## 2026-03-26
-- **The Pragmatic Programmer** - *pages* 120-145 (*25 pages*, *35 min*, *21:14*)
-  > Orthogonality section is dense, need to revisit tomorrow.
-```
-
-Readlog never rewrites old log entries.
+This file is append-only and oldest-first. Readlog never rewrites old log entries.
 
 ### Daily note integration
 
-When a reading session is logged, Readlog appends a plain line under a configurable markdown heading line in today’s daily note:
-
-```md
-##### *Reading*
-
-- [[The Pragmatic Programmer]] - *pages* 120-145 (*21:14*, *35 min*)
-```
-
-The heading may be a full markdown heading such as `## Reading` or `##### *Reading*`. If the heading does not exist, it is created.
+When a reading session is logged, Readlog appends a plain line under a configurable markdown heading line in today’s daily note. The heading may be a full markdown heading such as `## Reading` or `##### *Reading*`. If the heading does not exist, it is created. The same session is also appended under `## Log` in the corresponding book note.
 
 ### Settings
 
@@ -250,7 +282,8 @@ New books created from Kindle import use conservative defaults:
 - `status: to-read`
 - `medium: ebook`
 - `device: Kindle`
-- no page count or progress inferred
+- `progress_unit: loc`
+- no total or percent inferred
 
 ### Mapping rules
 
@@ -278,5 +311,5 @@ Each imported clipping is fingerprinted from normalized title, author, clipping 
 
 - no writes to `reading-log.md`
 - no writes to daily notes
-- no changes to reading progress
+- no automatic changes to reading progress
 - no automatic status transitions for existing books
