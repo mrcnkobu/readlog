@@ -1,6 +1,6 @@
 # Readlog Specification
 
-Last updated: 2026-03-29
+Last updated: 2026-06-28
 
 ## Philosophy
 
@@ -81,10 +81,48 @@ Field rules:
 
 ### Status values
 
+Internal values (stored in frontmatter):
+
 - `to-read`
 - `reading`
 - `done`
 - `abandoned`
+
+Display labels shown in modals:
+
+- `to-read` → Want to read
+- `reading` → Reading
+- `done` → Finished
+- `abandoned` → Abandoned
+
+### Modal conventions
+
+All Readlog modals follow these interaction rules:
+
+- the first input field is focused automatically on open
+- pressing Enter submits the form (no effect when a textarea has focus)
+- pressing Escape closes without saving
+
+### Book picker
+
+When a command needs you to select a book and no book note is currently open, Readlog shows a fuzzy-search picker. Each entry displays the title, author, and status.
+
+Book picker rules by command:
+
+| Command | Sort order | Hides abandoned |
+|---|---|---|
+| Log reading session | Reading first, then alphabetical | Yes |
+| Add entry | Reading first, then alphabetical | Yes |
+| Mark book as done | Reading first, then alphabetical | Yes |
+| Edit book | Alphabetical | No |
+
+If every book in the vault is abandoned, the filter is lifted and all books are shown.
+
+If a book note is currently open and active, all commands skip the picker and operate on that book directly.
+
+### Ribbon
+
+A `book-open` ribbon icon is added to the sidebar as a shortcut for `Readlog: Log reading session`.
 
 ### Commands
 
@@ -123,12 +161,12 @@ Editable fields:
 - device
 - status
 - progress unit
-- current progress
+- current progress (described inline with the computed percent at load time)
 - progress total
 - tags
 - started
 - finished
-- rating
+- rating (hint: 1–5)
 
 Behavior rules:
 
@@ -136,7 +174,7 @@ Behavior rules:
 - if status becomes `reading` and `started` is empty, set it to today
 - if status becomes `done` and `finished` is empty, set it to today
 - if title changes, rename the note file conservatively
-- allows deleting the book note after confirmation
+- allows deleting the book note; deletion requires a two-step in-modal confirm (click Delete → confirm row replaces the button row; no system dialog)
 - deleting a book trashes only the note file and does not rewrite old daily-note or reading-log entries
 
 #### `Readlog: Log reading session`
@@ -146,7 +184,7 @@ Logs a reading session for a book.
 Inputs:
 
 - book
-- new current progress
+- new current progress (pre-selected on open so the user can type immediately)
 - optional minutes spent
 - optional short session note
 
@@ -158,11 +196,16 @@ Behavior:
 - sets `status: reading` if needed
 - sets `started` if empty
 - appends a new entry to `Reading/reading-log.md`
-- appends one timestamped line to today’s daily note
+- appends one timestamped line to today's daily note
 - appends one compact session entry under `## Log` in the book note
 - includes the percent range from the previous position to the new one
 - includes a subtle backlink from the book note log entry to the corresponding daily note
 - suggests finishing the book when progress reaches `100%`
+
+Progress description shown in the modal:
+
+- for `page` and `loc` books: `Current pages: 120 / 350 (34%)`
+- for `percent` books: `Currently at 45%`
 
 Example daily note output:
 
@@ -193,7 +236,13 @@ Example book-note log output:
 
 #### `Readlog: Add entry`
 
-Adds either a note or a citation to a selected book.
+Adds either a note or a citation to a selected book. Abandoned books are excluded from the picker.
+
+Inputs (in modal order):
+
+1. text (textarea, auto-focused)
+2. entry type — note or citation
+3. locator (optional)
 
 Entry types:
 
@@ -214,13 +263,21 @@ For citations, Readlog appends:
 
 The locator is optional and may also be a Kindle location such as `loc.1845-1848`.
 
+#### `Readlog: Mark book as done`
+
+Sets a book's status to `done` and records `finished` as today if it was not already set. Skips with a notice if the book is already done. Abandoned books are excluded from the picker.
+
+#### `Readlog: Open reading log`
+
+Opens `Reading/reading-log.md` in the current leaf. Creates the file with a `# Reading Log` header if it does not exist yet.
+
 ### `reading-log.md`
 
 This file is append-only and oldest-first. Readlog never rewrites old log entries.
 
 ### Daily note integration
 
-When a reading session is logged, Readlog appends a plain line under a configurable markdown heading line in today’s daily note. The heading may be a full markdown heading such as `## Reading` or `##### *Reading*`. If the heading does not exist, it is created. The same session is also appended under `## Log` in the corresponding book note.
+When a reading session is logged, Readlog appends a plain line under a configurable markdown heading line in today's daily note. The heading may be a full markdown heading such as `## Reading` or `##### *Reading*`. If the heading does not exist, it is created. The same session is also appended under `## Log` in the corresponding book note.
 
 ### Settings
 
@@ -232,6 +289,8 @@ When a reading session is logged, Readlog appends a plain line under a configura
 | Daily notes folder template | `Daily` | Folder template used to resolve the daily note path |
 | Daily note name template | `{year}-{month}-{day}` | Filename template used for the daily note basename |
 | Daily note heading line | `## Reading` | Full markdown heading line Readlog appends under |
+
+Settings are saved 400ms after the last keystroke to avoid persisting partial values while typing.
 
 ### Daily note shortcodes
 
@@ -267,8 +326,9 @@ This feature is intentionally scoped to the local `My Clippings.txt` file. No Am
 2. Parse clipping entries into a structured intermediate model
 3. Group entries by source book
 4. Match each group to an existing Readlog book note
-5. If a title is unmatched, optionally create a new book note for it
+5. If any titles are unmatched, show an in-app confirmation modal with "Import and create" / "Import existing only" options
 6. Import only new highlights and notes
+7. Show an in-app result modal summarising what was imported (dismissable with OK or Enter)
 
 ### Matching rules
 
