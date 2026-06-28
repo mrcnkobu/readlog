@@ -7,6 +7,8 @@ import {
 } from "./utils";
 
 export class ReadlogSettingTab extends PluginSettingTab {
+	private readonly debouncedSave = debounce(() => void this.trySaveSettings(), 400);
+
 	constructor(app: App, private readonly plugin: ReadlogPlugin) {
 		super(app, plugin);
 	}
@@ -21,9 +23,9 @@ export class ReadlogSettingTab extends PluginSettingTab {
 			.setName("Root folder")
 			.addText((text) => {
 				text.setValue(this.plugin.settings.rootFolder);
-				text.onChange(async (value) => {
+				text.onChange((value) => {
 					this.plugin.settings.rootFolder = value.trim() || "Reading";
-					await this.trySaveSettings();
+					this.debouncedSave();
 				});
 			});
 
@@ -31,9 +33,9 @@ export class ReadlogSettingTab extends PluginSettingTab {
 			.setName("Books folder")
 			.addText((text) => {
 				text.setValue(this.plugin.settings.booksFolder);
-				text.onChange(async (value) => {
+				text.onChange((value) => {
 					this.plugin.settings.booksFolder = value.trim() || "Books";
-					await this.trySaveSettings();
+					this.debouncedSave();
 				});
 			});
 
@@ -41,9 +43,9 @@ export class ReadlogSettingTab extends PluginSettingTab {
 			.setName("Reading log filename")
 			.addText((text) => {
 				text.setValue(this.plugin.settings.readingLogFilename);
-				text.onChange(async (value) => {
+				text.onChange((value) => {
 					this.plugin.settings.readingLogFilename = value.trim() || "reading-log.md";
-					await this.trySaveSettings();
+					this.debouncedSave();
 				});
 			});
 
@@ -52,9 +54,9 @@ export class ReadlogSettingTab extends PluginSettingTab {
 			.setDesc("Supports shortcodes like {year}-{month}")
 			.addText((text) => {
 				text.setValue(this.plugin.settings.dailyNotesFolderTemplate);
-				text.onChange(async (value) => {
+				text.onChange((value) => {
 					this.plugin.settings.dailyNotesFolderTemplate = normalizeDailyFolderTemplate(value);
-					await this.trySaveSettings();
+					this.debouncedSave();
 				});
 			});
 
@@ -63,9 +65,9 @@ export class ReadlogSettingTab extends PluginSettingTab {
 			.setDesc("Supports shortcodes like {year}-{month}-{day}_{weekday_short}")
 			.addText((text) => {
 				text.setValue(this.plugin.settings.dailyNoteNameTemplate);
-				text.onChange(async (value) => {
+				text.onChange((value) => {
 					this.plugin.settings.dailyNoteNameTemplate = normalizeDailyNameTemplate(value);
-					await this.trySaveSettings();
+					this.debouncedSave();
 				});
 			});
 
@@ -74,9 +76,9 @@ export class ReadlogSettingTab extends PluginSettingTab {
 			.setDesc("Accepts full markdown, for example ## Reading or ##### *Reading*")
 			.addText((text) => {
 				text.setValue(this.plugin.settings.dailyNoteHeading);
-				text.onChange(async (value) => {
+				text.onChange((value) => {
 					this.plugin.settings.dailyNoteHeading = normalizeMarkdownHeading(value);
-					await this.trySaveSettings();
+					this.debouncedSave();
 				});
 			});
 	}
@@ -88,4 +90,12 @@ export class ReadlogSettingTab extends PluginSettingTab {
 			new Notice(error instanceof Error ? error.message : "Failed to save settings");
 		}
 	}
+}
+
+function debounce(fn: () => void, delay: number): () => void {
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	return () => {
+		clearTimeout(timer);
+		timer = window.setTimeout(fn, delay);
+	};
 }

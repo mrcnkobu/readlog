@@ -337,6 +337,18 @@ export class ReadlogService {
 		};
 	}
 
+	async ensureReadingLog(): Promise<TFile> {
+		const settings = this.getSettings();
+		await this.ensureFolder(this.rootFolderPath(settings));
+		const path = this.readingLogPath(settings);
+		await this.readOrCreate(path, "# Reading Log\n");
+		const file = this.app.vault.getAbstractFileByPath(normalizePath(path));
+		if (!(file instanceof TFile)) {
+			throw new Error("Could not access the reading log file.");
+		}
+		return file;
+	}
+
 	async listBooks(): Promise<BookRecord[]> {
 		const settings = this.getSettings();
 		const folderPath = `${this.booksFolderPath(settings)}/`;

@@ -1,6 +1,6 @@
 import { Notice, Plugin } from "obsidian";
 import { parseKindleClippings } from "./src/kindle-clippings";
-import { AddBookModal, AddEntryModal, BookSuggestModal, ConfirmModal, EditBookModal, LogReadingSessionModal } from "./src/modals";
+import { AddBookModal, AddEntryModal, BookSuggestModal, ConfirmModal, EditBookModal, InfoModal, LogReadingSessionModal } from "./src/modals";
 import { ReadlogService } from "./src/readlog-service";
 import { ReadlogSettingTab } from "./src/settings";
 import {
@@ -52,7 +52,7 @@ export default class ReadlogPlugin extends Plugin {
 							: `Logged session for ${book.title}`
 					);
 				}).open();
-			}, { preferReading: true });
+			}, { preferReading: true, excludeAbandoned: true });
 		});
 
 		this.addCommand({
@@ -101,7 +101,7 @@ export default class ReadlogPlugin extends Plugin {
 								: `Logged session for ${book.title}`
 						);
 					}).open();
-				}, { preferReading: true });
+				}, { preferReading: true, excludeAbandoned: true });
 			},
 		});
 
@@ -114,7 +114,7 @@ export default class ReadlogPlugin extends Plugin {
 						await this.service.addEntry(book.file, values);
 						new Notice(`Added ${values.type} to ${book.title}`);
 					}).open();
-				}, { preferReading: true });
+				}, { preferReading: true, excludeAbandoned: true });
 			},
 		});
 
@@ -142,7 +142,15 @@ export default class ReadlogPlugin extends Plugin {
 						rating: book.rating,
 					});
 					new Notice(`Marked "${updated.title}" as done.`);
-				}, { preferReading: true });
+				}, { preferReading: true, excludeAbandoned: true });
+			},
+		});
+
+		this.addCommand({
+			id: "open-reading-log",
+			name: "Open reading log",
+			callback: () => {
+				void this.openReadingLog();
 			},
 		});
 
@@ -233,7 +241,7 @@ export default class ReadlogPlugin extends Plugin {
 			}
 			await this.savePluginData();
 
-			new Notice(this.describeImportResult(selectedFile.name, plan, result), 12000);
+			new InfoModal(this.app, "Import complete", this.describeImportResult(selectedFile.name, plan, result)).open();
 		} catch (error) {
 			new Notice(error instanceof Error ? error.message : "Kindle import failed");
 		}
@@ -276,7 +284,7 @@ export default class ReadlogPlugin extends Plugin {
 		if (plan.ambiguousBooks > 0) {
 			parts.push(`${plan.ambiguousBooks} ambiguous title match(es) need manual review.`);
 		}
-		return parts.join(" ");
+		return parts.join("\n\n");
 	}
 
 	private async pickTextFile(): Promise<{ name: string; text: string } | null> {
@@ -357,9 +365,18 @@ export default class ReadlogPlugin extends Plugin {
 		});
 	}
 
+	private async openReadingLog() {
+		try {
+			const file = await this.service.ensureReadingLog();
+			await this.app.workspace.getLeaf(false).openFile(file);
+		} catch (error) {
+			new Notice(error instanceof Error ? error.message : "Could not open reading log");
+		}
+	}
+
 	private async runForBook(
 		callback: (book: BookRecord) => Promise<void>,
-		options?: { preferReading?: boolean }
+		options?: { preferReading?: boolean; excludeAbandoned?: boolean }
 	) {
 		try {
 			const activeBook = await this.service.getActiveBook();
@@ -368,7 +385,11 @@ export default class ReadlogPlugin extends Plugin {
 				return;
 			}
 
-			const books = await this.service.listBooks();
+			const allBooks = await this.service.listBooks();
+			const books = options?.excludeAbandoned && allBooks.some((b) => b.status !== "abandoned")
+				? allBooks.filter((b) => b.status !== "abandoned")
+				: allBooks;
+
 			const selectable = options?.preferReading
 				? [...books].sort((left, right) => {
 					if (left.status === right.status) {

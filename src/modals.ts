@@ -430,6 +430,9 @@ export class LogReadingSessionModal extends Modal {
 	}
 
 	private describeCurrentProgress(book: BookRecord): string {
+		if (book.progress_unit === "percent") {
+			return `Currently at ${book.progress_current}%`;
+		}
 		const totalPart = book.progress_total === null ? "" : ` / ${book.progress_total}`;
 		const percentPart = formatProgressPercent(book.progress_percent);
 		return `Current ${progressUnitLabel(book.progress_unit)}: ${book.progress_current}${totalPart}${percentPart ? ` (${percentPart})` : ""}`;
@@ -579,6 +582,27 @@ export class ConfirmModal extends Modal {
 		if (!this.settled) {
 			this.resolve(false);
 		}
+		this.contentEl.empty();
+	}
+}
+
+export class InfoModal extends Modal {
+	constructor(app: App, private readonly title: string, private readonly body: string) {
+		super(app);
+	}
+
+	onOpen() {
+		const { contentEl } = this;
+		contentEl.createEl("h2", { text: this.title });
+		for (const paragraph of this.body.split("\n\n")) {
+			contentEl.createEl("p", { text: paragraph });
+		}
+		new Setting(contentEl)
+			.addButton((btn) => btn.setButtonText("OK").setCta().onClick(() => this.close()));
+		this.scope.register([], "Enter", () => this.close());
+	}
+
+	onClose() {
 		this.contentEl.empty();
 	}
 }
