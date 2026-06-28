@@ -1,4 +1,4 @@
-import { App, TFile, moment, normalizePath, type FrontMatterCache } from "obsidian";
+import { App, TFile, TFolder, moment, normalizePath, type FrontMatterCache } from "obsidian";
 import { appendReadingLogEntry, appendToHeadingLine, appendToNamedSection, formatBookNoteContent } from "./markdown";
 import { groupKindleClippingsByBook, normalizeBookMatchTitle } from "./kindle-clippings";
 import type {
@@ -351,13 +351,13 @@ export class ReadlogService {
 
 	async listBooks(): Promise<BookRecord[]> {
 		const settings = this.getSettings();
-		const folderPath = `${this.booksFolderPath(settings)}/`;
-		const files = this.app.vault
-			.getMarkdownFiles()
-			.filter((file) => file.path.startsWith(folderPath));
+		const folder = this.app.vault.getAbstractFileByPath(this.booksFolderPath(settings));
+		if (!(folder instanceof TFolder)) {
+			return [];
+		}
 
 		const books: BookRecord[] = [];
-		for (const file of files) {
+		for (const file of this.listMarkdownFilesInFolder(folder)) {
 			const record = await this.loadBookRecord(file);
 			if (record) {
 				books.push(record);
@@ -629,6 +629,18 @@ export class ReadlogService {
 
 	private readFrontmatter(file: TFile): FrontMatterCache | null {
 		return this.app.metadataCache.getFileCache(file)?.frontmatter ?? null;
+	}
+
+	private listMarkdownFilesInFolder(folder: TFolder): TFile[] {
+		const files: TFile[] = [];
+		for (const child of folder.children) {
+			if (child instanceof TFile && child.extension === "md") {
+				files.push(child);
+			} else if (child instanceof TFolder) {
+				files.push(...this.listMarkdownFilesInFolder(child));
+			}
+		}
+		return files;
 	}
 
 	private async processBookFrontmatter(
