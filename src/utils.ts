@@ -46,7 +46,7 @@ export function migrateLegacyDailyNoteNameTemplate(value: string | undefined): s
 
 	let migrated = trimmed;
 	for (const [legacyToken, shortcode] of LEGACY_NAME_TOKEN_MAP) {
-		migrated = migrated.replaceAll(legacyToken, shortcode);
+		migrated = replaceAllText(migrated, legacyToken, shortcode);
 	}
 	return migrated;
 }
@@ -75,7 +75,7 @@ export function resolveDailyTemplate(template: string, date: string): string {
 
 	let output = template;
 	for (const token of DAILY_TEMPLATE_TOKENS) {
-		output = output.replaceAll(token, replacements[token]);
+		output = replaceAllText(output, token, replacements[token]);
 	}
 	return output;
 }
@@ -230,6 +230,10 @@ function parseIsoDate(value: string): Date {
 
 function pad2(value: number): string {
 	return String(value).padStart(2, "0");
+}
+
+function replaceAllText(value: string, search: string, replacement: string): string {
+	return value.split(search).join(replacement);
 }
 
 function clampPercent(value: number): number {

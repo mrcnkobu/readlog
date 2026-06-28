@@ -7,7 +7,6 @@ import {
 	Setting,
 	TextAreaComponent,
 	TextComponent,
-	activeDocument,
 } from "obsidian";
 import {
 	formatProgressPercent,
@@ -306,7 +305,7 @@ export class EditBookModal extends Modal {
 		if (!this.deleteConfirmState) {
 			new Setting(this.buttonRowEl)
 				.addButton((btn) => btn.setButtonText("Save").setCta().onClick(() => void this.submit()))
-				.addButton((btn) => btn.setButtonText("Delete").setDestructive().onClick(() => {
+				.addButton((btn) => btn.setButtonText("Delete").onClick(() => {
 					this.deleteConfirmState = true;
 					this.renderButtons();
 				}))
@@ -315,7 +314,7 @@ export class EditBookModal extends Modal {
 			new Setting(this.buttonRowEl)
 				.setName("Delete this book?")
 				.setDesc("The note file will be trashed. Log entries will be kept.")
-				.addButton((btn) => btn.setButtonText("Confirm delete").setDestructive().onClick(() => void this.deleteBook()))
+				.addButton((btn) => btn.setButtonText("Confirm delete").onClick(() => void this.deleteBook()))
 				.addButton((btn) => btn.setButtonText("Cancel").onClick(() => {
 					this.deleteConfirmState = false;
 					this.renderButtons();
@@ -634,7 +633,11 @@ function addModalHeading(container: HTMLElement, title: string) {
 }
 
 function isTextAreaActive(): boolean {
-	return activeDocument.activeElement?.tagName === "TEXTAREA";
+	return getActiveDocument().activeElement?.tagName === "TEXTAREA";
+}
+
+function getActiveDocument(): Document {
+	return window.activeDocument;
 }
 
 function createTextSetting(

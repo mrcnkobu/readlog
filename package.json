@@ -1,6 +1,6 @@
 {
 	"name": "readlog",
-	"version": "0.1.1",
+	"version": "0.1.2",
 	"description": "A plain-markdown reading tracker for Obsidian",
 	"main": "main.js",
 	"scripts": {

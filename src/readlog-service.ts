@@ -115,7 +115,7 @@ export class ReadlogService {
 
 	async deleteBook(file: TFile): Promise<void> {
 		await this.requireBook(file);
-		await this.app.fileManager.trashFile(file);
+		await this.app.vault.trash(file, false);
 	}
 
 	async logReadingSession(file: TFile, values: LogReadingSessionValues): Promise<LogReadingSessionResult> {
@@ -707,12 +707,12 @@ export class ReadlogService {
 }
 
 function readString(frontmatter: FrontMatterCache, key: string): string | null {
-	const value = frontmatter[key];
+	const value = readFrontmatterValue(frontmatter, key);
 	return typeof value === "string" ? value : null;
 }
 
 function readNullableString(frontmatter: FrontMatterCache, key: string): string | null {
-	const value = frontmatter[key];
+	const value = readFrontmatterValue(frontmatter, key);
 	if (typeof value === "string" && value.length > 0) {
 		return value;
 	}
@@ -720,13 +720,17 @@ function readNullableString(frontmatter: FrontMatterCache, key: string): string 
 }
 
 function readNullableNumber(frontmatter: FrontMatterCache, key: string): number | null {
-	const value = frontmatter[key];
+	const value = readFrontmatterValue(frontmatter, key);
 	return typeof value === "number" ? value : null;
 }
 
 function readStringArray(frontmatter: FrontMatterCache, key: string): string[] {
-	const value = frontmatter[key];
+	const value = readFrontmatterValue(frontmatter, key);
 	return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+function readFrontmatterValue(frontmatter: FrontMatterCache, key: string): unknown {
+	return (frontmatter as unknown as Record<string, unknown>)[key];
 }
 
 function readBookStatus(value: unknown): BookStatus {

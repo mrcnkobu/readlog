@@ -18,7 +18,7 @@ export class ReadlogSettingTab extends PluginSettingTab {
 		containerEl.empty();
 
 		new Setting(containerEl)
-			.setName("Readlog settings")
+			.setName("Configuration")
 			.setHeading();
 
 		new Setting(containerEl)

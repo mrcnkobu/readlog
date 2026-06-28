@@ -1,4 +1,4 @@
-import { Notice, Plugin, activeDocument } from "obsidian";
+import { Notice, Plugin } from "obsidian";
 import { parseKindleClippings } from "./src/kindle-clippings";
 import { AddBookModal, AddEntryModal, BookSuggestModal, ConfirmModal, EditBookModal, InfoModal, LogReadingSessionModal } from "./src/modals";
 import { ReadlogService } from "./src/readlog-service";
@@ -317,10 +317,11 @@ export default class ReadlogPlugin extends Plugin {
 		}
 
 		return await new Promise((resolve, reject) => {
-			const input = activeDocument.createElement("input");
+			const pickerDocument = getActiveDocument();
+			const input = pickerDocument.createElement("input");
 			input.type = "file";
 			input.accept = ".txt,text/plain";
-			input.addClass(READLOG_HIDDEN_FILE_INPUT_CLASS);
+			input.classList.add(READLOG_HIDDEN_FILE_INPUT_CLASS);
 
 			let settled = false;
 			const finish = (value: { name: string; text: string } | null) => {
@@ -351,18 +352,18 @@ export default class ReadlogPlugin extends Plugin {
 
 				void file.text().then((text) => {
 					finish({ name: file.name, text });
-				}).catch((error) => {
-					if (!settled) {
-						settled = true;
-						window.removeEventListener("focus", handleFocus);
-						input.remove();
-						reject(error instanceof Error ? error : new Error("Could not read the selected file."));
-					}
-				});
+					}).catch(() => {
+						if (!settled) {
+							settled = true;
+							window.removeEventListener("focus", handleFocus);
+							input.remove();
+							reject(new Error("Could not read the selected file."));
+						}
+					});
 			}, { once: true });
 
 			window.addEventListener("focus", handleFocus, { once: true });
-			activeDocument.body.appendChild(input);
+			pickerDocument.body.appendChild(input);
 			input.click();
 		});
 	}
@@ -425,4 +426,8 @@ export default class ReadlogPlugin extends Plugin {
 
 function isAbortError(error: unknown): boolean {
 	return error instanceof DOMException && error.name === "AbortError";
+}
+
+function getActiveDocument(): Document {
+	return window.activeDocument;
 }
