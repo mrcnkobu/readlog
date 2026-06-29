@@ -116,7 +116,7 @@ export class ReadlogService {
 
 	async deleteBook(file: TFile): Promise<void> {
 		await this.requireBook(file);
-		await this.app.vault.trash(file, false);
+		await this.app.fileManager.trashFile(file);
 	}
 
 	async logReadingSession(file: TFile, values: LogReadingSessionValues): Promise<LogReadingSessionResult> {
