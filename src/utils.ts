@@ -78,6 +78,18 @@ export function normalizeSessionDate(value: string, today: string): string {
 	return trimmed;
 }
 
+export function normalizeSessionTime(value: string, now: string): string {
+	const trimmed = value.trim();
+	if (!trimmed) {
+		return now;
+	}
+
+	if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(trimmed)) {
+		throw new Error("Session time must use HH:mm format.");
+	}
+	return trimmed;
+}
+
 export function resolveDailyTemplate(template: string, date: string): string {
 	const resolvedDate = parseIsoDate(date);
 	const replacements: Record<string, string> = {

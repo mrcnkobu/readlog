@@ -8,6 +8,7 @@ import {
 	normalizeDailyFolderTemplate,
 	normalizeDailyNameTemplate,
 	normalizeSessionDate,
+	normalizeSessionTime,
 	resolveDailyTemplate,
 	serializeFrontmatter,
 } from "../src/utils";
@@ -54,6 +55,17 @@ test("normalizeSessionDate rejects invalid or future dates", () => {
 	assert.throws(() => normalizeSessionDate("2026-02-31", "2026-06-29"), /Invalid ISO date/);
 	assert.throws(() => normalizeSessionDate("2026/06/29", "2026-06-29"), /Invalid ISO date/);
 	assert.throws(() => normalizeSessionDate("2026-06-30", "2026-06-29"), /future/);
+});
+
+test("normalizeSessionTime accepts HH:mm and defaults blank values to now", () => {
+	assert.equal(normalizeSessionTime("07:05", "21:30"), "07:05");
+	assert.equal(normalizeSessionTime("  ", "21:30"), "21:30");
+});
+
+test("normalizeSessionTime rejects invalid times", () => {
+	assert.throws(() => normalizeSessionTime("7:05", "21:30"), /HH:mm/);
+	assert.throws(() => normalizeSessionTime("24:00", "21:30"), /HH:mm/);
+	assert.throws(() => normalizeSessionTime("12:60", "21:30"), /HH:mm/);
 });
 
 test("normalizeBookProgress computes percent for loc progress", () => {

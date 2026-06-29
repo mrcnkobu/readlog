@@ -12,6 +12,7 @@ import {
 import {
 	formatProgressPercent,
 	normalizeSessionDate,
+	normalizeSessionTime,
 	progressInputLabel,
 	progressUnitLabel,
 } from "./utils";
@@ -358,6 +359,7 @@ export class EditBookModal extends Modal {
 
 export class LogReadingSessionModal extends Modal {
 	private sessionDateValue = moment().format("YYYY-MM-DD");
+	private sessionTimeValue = moment().format("HH:mm");
 	private newProgressCurrentValue: string;
 	private minutesSpentValue = "";
 	private noteValue = "";
@@ -379,6 +381,10 @@ export class LogReadingSessionModal extends Modal {
 		createDateSetting(contentEl, "Session date", this.sessionDateValue, moment().format("YYYY-MM-DD"), (value) => {
 			this.sessionDateValue = value.trim();
 		}, "YYYY-MM-DD");
+
+		createTimeSetting(contentEl, "Session time", this.sessionTimeValue, (value) => {
+			this.sessionTimeValue = value.trim();
+		}, "HH:mm");
 
 		const currentSummary = this.describeCurrentProgress(this.book);
 		let progressInput: TextComponent | undefined;
@@ -449,6 +455,7 @@ export class LogReadingSessionModal extends Modal {
 		await submitWithNotice(async () => {
 			await this.onSubmit({
 				sessionDate: normalizeSessionDate(this.sessionDateValue, moment().format("YYYY-MM-DD")),
+				sessionTime: normalizeSessionTime(this.sessionTimeValue, moment().format("HH:mm")),
 				newProgressCurrent: toRequiredNumber(this.newProgressCurrentValue, "new current progress"),
 				minutesSpent: toOptionalNumber(this.minutesSpentValue, "minutes spent"),
 				note: this.noteValue || null,
@@ -697,6 +704,23 @@ function createDateSetting(
 		.addText((text: TextComponent) => {
 			text.inputEl.type = "date";
 			text.inputEl.max = max;
+			text.setValue(value);
+			text.onChange(onChange);
+		});
+}
+
+function createTimeSetting(
+	container: HTMLElement,
+	name: string,
+	value: string,
+	onChange: (value: string) => void,
+	description?: string
+) {
+	new Setting(container)
+		.setName(name)
+		.setDesc(description ?? "")
+		.addText((text: TextComponent) => {
+			text.inputEl.type = "time";
 			text.setValue(value);
 			text.onChange(onChange);
 		});

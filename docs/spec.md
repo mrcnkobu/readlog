@@ -185,6 +185,7 @@ Inputs:
 
 - book
 - session date (defaults to today; future dates are rejected)
+- session time (defaults to now)
 - new current progress (pre-selected on open so the user can type immediately)
 - optional minutes spent
 - optional short session note
