@@ -23,6 +23,7 @@ import {
 	normalizeBookProgress,
 	normalizeBookProgressFrontmatter,
 	normalizeMarkdownHeading,
+	normalizeSessionDate,
 	progressDeltaLabel,
 	progressUnitLabel,
 	resolveDailyTemplate,
@@ -120,6 +121,7 @@ export class ReadlogService {
 
 	async logReadingSession(file: TFile, values: LogReadingSessionValues): Promise<LogReadingSessionResult> {
 		const book = await this.requireBook(file);
+		const date = normalizeSessionDate(values.sessionDate, this.currentDate());
 		if (values.newProgressCurrent < book.progress_current) {
 			throw new Error("New current progress cannot be lower than current progress.");
 		}
@@ -140,11 +142,10 @@ export class ReadlogService {
 			setNumericOrEmpty(frontmatter, "progress_total", nextProgress.total);
 			setNumericOrEmpty(frontmatter, "progress_percent", nextProgress.percent);
 			if (!frontmatter.started) {
-				frontmatter.started = this.currentDate();
+				frontmatter.started = date;
 			}
 		});
 
-		const date = this.currentDate();
 		const time = this.currentTime();
 		const delta = nextProgress.current - book.progress_current;
 		const logEntry = this.buildReadingLogEntry(

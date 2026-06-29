@@ -7,6 +7,7 @@ import {
 	normalizeBookProgressFrontmatter,
 	normalizeDailyFolderTemplate,
 	normalizeDailyNameTemplate,
+	normalizeSessionDate,
 	resolveDailyTemplate,
 	serializeFrontmatter,
 } from "../src/utils";
@@ -38,6 +39,21 @@ test("resolveDailyTemplate expands supported shortcodes", () => {
 		resolveDailyTemplate("{year}-{month}/{year}-{month}-{day}_{weekday_short}", "2025-01-06"),
 		"2025-01/2025-01-06_Mon"
 	);
+});
+
+test("normalizeSessionDate accepts today and past dates", () => {
+	assert.equal(normalizeSessionDate("2026-06-29", "2026-06-29"), "2026-06-29");
+	assert.equal(normalizeSessionDate("2026-06-01", "2026-06-29"), "2026-06-01");
+});
+
+test("normalizeSessionDate defaults blank values to today", () => {
+	assert.equal(normalizeSessionDate("  ", "2026-06-29"), "2026-06-29");
+});
+
+test("normalizeSessionDate rejects invalid or future dates", () => {
+	assert.throws(() => normalizeSessionDate("2026-02-31", "2026-06-29"), /Invalid ISO date/);
+	assert.throws(() => normalizeSessionDate("2026/06/29", "2026-06-29"), /Invalid ISO date/);
+	assert.throws(() => normalizeSessionDate("2026-06-30", "2026-06-29"), /future/);
 });
 
 test("normalizeBookProgress computes percent for loc progress", () => {

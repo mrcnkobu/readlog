@@ -184,6 +184,7 @@ Logs a reading session for a book.
 Inputs:
 
 - book
+- session date (defaults to today; future dates are rejected)
 - new current progress (pre-selected on open so the user can type immediately)
 - optional minutes spent
 - optional short session note
@@ -194,9 +195,9 @@ Behavior:
 - updates `progress_current`
 - recalculates `progress_percent`
 - sets `status: reading` if needed
-- sets `started` if empty
+- sets `started` to the session date if empty
 - appends a new entry to `Reading/reading-log.md`
-- appends one timestamped line to today's daily note
+- appends one timestamped line to the selected date's daily note
 - appends one compact session entry under `## Log` in the book note
 - includes the percent range from the previous position to the new one
 - includes a subtle backlink from the book note log entry to the corresponding daily note
@@ -277,7 +278,7 @@ This file is append-only and oldest-first. Readlog never rewrites old log entrie
 
 ### Daily note integration
 
-When a reading session is logged, Readlog appends a plain line under a configurable markdown heading line in today's daily note. The heading may be a full markdown heading such as `## Reading` or `##### *Reading*`. If the heading does not exist, it is created. The same session is also appended under `## Log` in the corresponding book note.
+When a reading session is logged, Readlog appends a plain line under a configurable markdown heading line in the selected date's daily note. The heading may be a full markdown heading such as `## Reading` or `##### *Reading*`. If the heading does not exist, it is created. The same session is also appended under `## Log` in the corresponding book note.
 
 ### Settings
 

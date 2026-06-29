@@ -63,6 +63,21 @@ export function normalizeDailyNameTemplate(value: string): string {
 	return trimmed;
 }
 
+export function normalizeSessionDate(value: string, today: string): string {
+	const trimmed = value.trim();
+	if (!trimmed) {
+		return today;
+	}
+
+	parseIsoDate(trimmed);
+	const currentDate = parseIsoDate(today);
+	const sessionDate = parseIsoDate(trimmed);
+	if (sessionDate.getTime() > currentDate.getTime()) {
+		throw new Error("Session date cannot be in the future.");
+	}
+	return trimmed;
+}
+
 export function resolveDailyTemplate(template: string, date: string): string {
 	const resolvedDate = parseIsoDate(date);
 	const replacements: Record<string, string> = {
@@ -225,7 +240,15 @@ function parseIsoDate(value: string): Date {
 	}
 
 	const [, year, month, day] = match;
-	return new Date(Number(year), Number(month) - 1, Number(day));
+	const parsed = new Date(Number(year), Number(month) - 1, Number(day));
+	if (
+		parsed.getFullYear() !== Number(year)
+		|| parsed.getMonth() !== Number(month) - 1
+		|| parsed.getDate() !== Number(day)
+	) {
+		throw new Error(`Invalid ISO date: ${value}`);
+	}
+	return parsed;
 }
 
 function pad2(value: number): string {

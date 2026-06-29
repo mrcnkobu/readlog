@@ -73,6 +73,7 @@ export interface EditBookValues {
 }
 
 export interface LogReadingSessionValues {
+	sessionDate: string;
 	newProgressCurrent: number;
 	minutesSpent: number | null;
 	note: string | null;

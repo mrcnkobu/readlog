@@ -89,7 +89,7 @@ npm run verify
 |---|---|
 | `Add book` | Create a new book note with frontmatter, `## Cover`, and the standard sections |
 | `Edit book` | Update metadata such as status, medium, device, progress unit, current progress, progress total, rating, and dates, or delete the book note |
-| `Log reading session` | Update reading progress, capture optional minutes spent, append to `reading-log.md`, append a timestamped line to today’s daily note, and add the same session to the book note `## Log` section |
+| `Log reading session` | Update reading progress, choose the session date, capture optional minutes spent, append to `reading-log.md`, append a timestamped line to that date’s daily note, and add the same session to the book note `## Log` section |
 | `Add entry` | Append a note or citation under the correct section in the selected book note |
 | `Import Kindle Clippings` | Pick a local `My Clippings.txt` file, import new highlights and notes, match existing books conservatively, and optionally create missing book notes |
 
